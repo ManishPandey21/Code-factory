@@ -1,6 +1,9 @@
-# Infra Code Factory 0.4.0 — EGM integration candidate
+# Infra Code Factory 0.4.1 — EGM integration candidate
 
-0.4.0 adds Google Elephant–Goldfish Model design handoffs, shared Claude/Codex workflow entries,
+0.4.1 adds verified Matt Pocock/Superpowers skill inventories and conditional
+builder helpers for Claude and Codex. See [SKILL_PROFILES.md](docs/SKILL_PROFILES.md).
+
+0.4.0 added Google Elephant–Goldfish Model design handoffs, shared Claude/Codex workflow entries,
 explicit provider/model configuration, and stronger route evidence validation.
 Start with [EGM_WORKFLOW.md](docs/EGM_WORKFLOW.md) and [the current audit](docs/AUDIT_V040.md).
 The original classic workflow remains available. See [CHANGELOG.md](CHANGELOG.md).

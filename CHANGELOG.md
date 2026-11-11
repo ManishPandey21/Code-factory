@@ -1,3 +1,16 @@
+# 0.4.1 — Matt Pocock and Superpowers integration
+
+- Add a selected installed-skill inventory with availability, invocation flags,
+  and hashes of skill directories and bundled references.
+- Add `configure.py --skills-inventory` for either provider, preserving the
+  existing single `--tdd-skill` mode.
+- Route conditional debugging, completion, feedback and module-design helpers
+  to builders; keep orchestration/user-only skills with the coordinator.
+- Validate inventories before execution and include helper files in toolchain
+  evidence. Reject stale/missing required skills and ambiguous installations.
+- Document task-specific use of Matt and Superpowers alongside EGM, without
+  competing design loops or recursive agent allocation.
+
 # 0.4.0 — EGM integration candidate
 
 - Add official EGM workflow instructions and matching Claude/Codex skill entries.

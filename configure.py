@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 import sys
 
+from skill_inventory import builder_skills
+
 EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
 CODEX_EFFORTS = ('low', 'medium', 'high')
 ROLES = ('builder_routine', 'builder_complex', 'builder_critical', 'reviewer_standards', 'reviewer_spec',
@@ -49,7 +51,8 @@ def mapping(bridge, skill, role, provider, model, effort):
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--repo', required=True, type=Path)
-    p.add_argument('--tdd-skill', required=True, type=Path)
+    p.add_argument('--tdd-skill', type=Path)
+    p.add_argument('--skills-inventory', type=Path, help='verified Matt/Superpowers skill inventory')
     p.add_argument('--provider', choices=['claude', 'codex'], help='default provider for all roles')
     p.add_argument('--model', help='explicit model ID available in your account')
     p.add_argument('--effort', choices=EFFORTS, default='medium')
@@ -58,9 +61,22 @@ def main(argv=None):
                    help='override one role, e.g. builder_routine=codex:gpt-6.1-sol:medium (repeatable)')
     p.add_argument('--apply', action='store_true')
     a = p.parse_args(argv)
-    skill = a.tdd_skill.expanduser().resolve()
-    if not skill.is_file():
-        p.error('--tdd-skill must point to the installed TDD SKILL.md')
+    helpers = {}
+    inventory = None
+    if a.skills_inventory:
+        if a.tdd_skill:
+            p.error('Choose --skills-inventory or --tdd-skill, not both')
+        try:
+            inventory = json.loads(a.skills_inventory.read_text())
+            skill, helpers = builder_skills(inventory)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            p.error(str(exc))
+    else:
+        if not a.tdd_skill:
+            p.error('Provide --skills-inventory or --tdd-skill')
+        skill = a.tdd_skill.expanduser().resolve()
+        if not skill.is_file():
+            p.error('--tdd-skill must point to the installed TDD SKILL.md')
     path = a.repo.resolve() / '.infra-factory/config.json'
     c = json.loads(path.read_text())
     bridge = Path(__file__).with_name('agent_bridge.py').resolve()
@@ -81,6 +97,13 @@ def main(argv=None):
     if a.egm:
         c['workflow'] = 'egm'
     commands = {role: mapping(bridge, skill, role, *routes[role]) for role in ROLES}
+    for role, spec in commands.items():
+        if role.startswith('builder') and helpers:
+            spec['support_skills'] = dict(helpers)
+    if inventory is not None:
+        c['skill_inventory'] = inventory
+    else:
+        c.pop('skill_inventory', None)
     for legacy, role in LEGACY_ALIASES.items():   # tickets are still validated by role
         commands[legacy] = commands[role]
     c['commands'] = commands

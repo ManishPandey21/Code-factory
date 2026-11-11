@@ -68,6 +68,10 @@ Ticket decomposition and the configured TDD skill remain part of implementation.
 
 ## Configure either provider
 
+For Matt Pocock + Superpowers integration, use the verified inventory profile
+in [SKILL_PROFILES.md](SKILL_PROFILES.md). The single-TDD-path setup below
+remains available for existing installations.
+
 Use an actual model ID available to your account. No models are guessed. Both
 providers can fill every worker/reviewer role; use repeated `--route` options to
 specialize roles. The coordinator's host does not force the worker provider.

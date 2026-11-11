@@ -1,5 +1,9 @@
 # Skill routing by workflow
 
+For the combined Matt Pocock + Superpowers profile, installation, conditional
+helpers and executable inventory checks, see [SKILL_PROFILES.md](SKILL_PROFILES.md).
+The stage mappings below remain compatible with that profile.
+
 For `workflow: egm`, use the official EGM plugin for requirements/design:
 `egm-brainstorm` → `egm-draft` → `egm-review` → `egm-resolve`, then actual human
 approval and `egm.py` handoff. Use `egm-drift-report` after implementation.
@@ -22,14 +26,14 @@ Exactly one **primary** skill is selected at each stage. Some upstream skills re
 | Create vertical tickets | to-tickets | Matt Pocock curated collection | Coordinator |
 | Implement a behavioral ticket | test-driven-development | Superpowers | Assigned builder |
 | Diagnose a failure | systematic-debugging | Superpowers | Assigned builder, only after failure |
-| Review candidate | code-review | Matt Pocock curated collection | Coordinator dispatches fresh spec and standards leaf reviewers |
+| Review candidate | Factory standards/spec lenses | Built-in factory prompts | Controller dispatches fresh leaf reviewers |
 | Confirm completion | verification-before-completion | Superpowers | Coordinator, using actual check/review receipts |
 
 Coordinator tracking is implemented by the factory ledger; it does not need master, masterofall, dream, wayfinder or another orchestration skill. No change is made to those existing skills. Context continuity is the ledger, task specification, Git state and bounded logs.
 
 ## Upstream dependencies and conflict handling
 
-Matt code-review requires independent standards and specification reviewers. The coordinator launches those leaves from raw requirements and the candidate; a builder never reviews its own implementation. Leaves receive their lens rather than instructions to recursively run code-review. Superpowers debugging refers to TDD and verification; the coordinator transitions between the predefined stages rather than growing an unrestricted tree of agents.
+Matt code-review is available for separate requested audits and requires its own standards sources, criteria and independent reviewers. Factory execution uses its own two-lens prompts; it does not claim to run that native skill. A builder never reviews its own implementation. Factory leaves receive their lens rather than instructions to recursively run code-review. Superpowers debugging refers to TDD and verification; the coordinator transitions between the predefined stages rather than growing an unrestricted tree of agents.
 
 Do not run Superpowers brainstorming and Matt grill-me for the same requirement phase. Do not run Superpowers writing-plans and Matt to-tickets as competing ticket generators. Do not combine subagent-driven-development with a second active allocator. Existing global plugins can still auto-trigger; inspect applicable instructions and resolve conflicts during onboarding. The runner does not silently disable installed plugins.
 
