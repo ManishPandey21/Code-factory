@@ -1,3 +1,13 @@
+# 0.4.2 — durable ticket controls and skill navigation
+
+- Add a table of contents matching all eight headings in the shared skill.
+- Adapt Machinist's durable private holds with version-checked hold/release,
+  transactional audit events and dispatch/retry/publication/supersession guards.
+- Reserve inactive held ticket paths until release; retain verification separately.
+- Add opt-in `add --idempotent` without resetting state, attempts, holds or events.
+- Keep status and hold management usable when execution configuration is broken.
+- Record the source comparison, upgrade limits and behavioral tests.
+
 # 0.4.1 — Matt Pocock and Superpowers integration
 
 - Add a selected installed-skill inventory with availability, invocation flags,

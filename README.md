@@ -1,6 +1,10 @@
-# Infra Code Factory 0.4.1 — EGM integration candidate
+# Infra Code Factory 0.4.2 — EGM integration candidate
 
-0.4.1 adds verified Matt Pocock/Superpowers skill inventories and conditional
+0.4.2 adds durable versioned ticket holds, duplicate-safe intake, and a heading-matched
+skill table of contents. See [ticket controls](docs/TICKET_CONTROLS.md) and
+[the Machinist comparison](docs/MACHINIST_REVIEW.md).
+
+0.4.1 added verified Matt Pocock/Superpowers skill inventories and conditional
 builder helpers for Claude and Codex. See [SKILL_PROFILES.md](docs/SKILL_PROFILES.md).
 
 0.4.0 added Google Elephant–Goldfish Model design handoffs, shared Claude/Codex workflow entries,
@@ -124,6 +128,10 @@ For a new project append: “Begin with the product interview and a minimal runn
 See `examples/DEMO-001.json` and `DEMO-002.json`. Required fields: `id`, `title`, `description`, nonempty `acceptance`, literal relative `paths`, `depends_on`, `role` (`backend`, `frontend`, `critical`), and `spec` with exactly the sections `ui`, `api`, `data` and `cross_cutting`, each either `{impact, acceptance}` or `{not_applicable}`. Paths may be files or directories; use forward slashes. Glob patterns and traversal are rejected. A ticket's scope must cover its tests as well as implementation. Existing IDs are not overwritten.
 
 ## Tracking, recovery and limits
+
+Use `hold` / `release` to pause inactive tickets durably, and `add --idempotent`
+when repeating an identical submission after a lost response. See
+[TICKET_CONTROLS.md](docs/TICKET_CONTROLS.md) for version checks and examples.
 
 - SQLite ledger, prompts, logs, candidate branches and reviewer worktrees live under the Git common directory's `infra-factory/`. This is local durable state, not GitHub backup. Back it up through your normal local backup process; do not publish private prompts/logs blindly.
 - `status` shows recorded state and evidence. READY is a historical local result; `publish` performs current eligibility checks. It is not a production-readiness certificate.

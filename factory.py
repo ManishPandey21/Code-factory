@@ -30,6 +30,7 @@ import sys
 import threading
 import time
 
+from ticket_controls import control, require_unheld, change_control
 from skill_inventory import helper_prompt, skill_files, validate_inventory
 from egm import validate_handoff
 from verification_policy import validate_policy, validate_evidence, validate_spec
@@ -263,6 +264,7 @@ def inherited_attempts(con, t):
     """A replacement ticket keeps the attempt history of what it replaces; renaming grants nothing."""
     inherited = 0
     for old in t.get('supersedes', []):
+        require_unheld(con, old)
         row = con.execute('SELECT * FROM tickets WHERE id=?', (old,)).fetchone()
         if not row:
             raise FactoryError(f'Unknown superseded ticket: {old}')
@@ -752,10 +754,15 @@ def select_tickets(rows, limit, waiting=None):
     states = {r['id']: r['state'] for r in rows}
     # An unmerged candidate still owns its paths: a second candidate from the same
     # base over the same files would be reviewed against code that is about to change.
-    held = {r['id']: json.loads(r['ticket']).get('paths', []) for r in rows if r['state'] in ('READY', 'RUNNING', 'REVIEWING')}
+    held = {r['id']: json.loads(r['ticket']).get('paths', []) for r in rows
+            if r['state'] in ('READY', 'RUNNING', 'REVIEWING') or
+            (r['state'] in ('PENDING', 'BLOCKED') and r.get('hold_reason') is not None)}
     selected = []
     for row in rows:
         if row['state'] != 'PENDING':
+            continue
+        if row.get('hold_reason') is not None:
+            waiting[row['id']] = 'ticket is held: ' + row['hold_reason']
             continue
         t = json.loads(row['ticket'])
         try:
@@ -781,6 +788,7 @@ def select_tickets(rows, limit, waiting=None):
 
 def publish(repo, home, c, ticket_id, execute):
     with connect(home) as con:
+        require_unheld(con, ticket_id)
         row = con.execute('SELECT * FROM tickets WHERE id=?', (ticket_id,)).fetchone()
     if not row or row['state'] != 'READY':
         raise FactoryError('Only READY tickets may be published')
@@ -888,13 +896,18 @@ def publish(repo, home, c, ticket_id, execute):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest='action', required=True)
-    for name in ('init', 'add', 'status', 'run', 'recover', 'unlock', 'publish', 'retry', 'reject'):
+    for name in ('init', 'add', 'status', 'run', 'recover', 'unlock', 'publish', 'retry', 'reject', 'hold', 'release'):
         p = subs.add_parser(name)
         p.add_argument('--repo', required=True)
         if name == 'init':
             p.add_argument('--apply', action='store_true')
-        if name in ('add', 'recover', 'publish', 'retry', 'reject'):
+        if name in ('add', 'recover', 'publish', 'retry', 'reject', 'hold', 'release'):
             p.add_argument('--ticket', required=True)
+        if name == 'add':
+            p.add_argument('--idempotent', action='store_true')
+        if name in ('hold', 'release'):
+            p.add_argument('--hold-version', type=int, required=True)
+            p.add_argument('--reason', required=True)
         if name in ('run', 'publish'):
             p.add_argument('--execute', action='store_true')
         if name == 'run':
@@ -916,16 +929,33 @@ def main(argv=None):
             initialize_db(home)
         print('Initialized; configure nonempty checks and authenticated CLI commands before execution.')
         return 0
-    if not cfg.exists() or not (home / 'ledger.sqlite3').exists():
+    if (not (home / 'ledger.sqlite3').exists() or
+            (not cfg.exists() and args.action not in ('status', 'hold', 'release'))):
         raise FactoryError('Run init --apply first')
-    c = config(repo)
+    if args.action in ('hold', 'release'):
+        with lock(home), connect(home) as con:
+            state, controls = change_control(con, args.ticket, args.hold_version, args.reason,
+                                             release=args.action == 'release')
+            record(con, args.ticket, state, {'action': args.action, 'reason': args.reason, **controls})
+        print(json.dumps({'id': args.ticket, **controls}))
+        return 0
+    config_error = None
+    try:
+        c = config(repo)
+    except (FactoryError, OSError, ValueError, KeyError, TypeError) as exc:
+        if args.action != 'status':
+            raise
+        c, config_error = None, str(exc)
     if args.action == 'status':
         with connect(home) as con:
             rows = [dict(r) for r in con.execute('SELECT * FROM tickets ORDER BY updated,id')]
+            for row in rows:
+                row.update(control(con, row['id']))
+                row['publication_held'] = row['hold_reason'] is not None
         for row in rows:
             row['ticket'] = json.loads(row['ticket'])
             row['verification_current'] = False
-            if row['state'] == 'READY':
+            if row['state'] == 'READY' and c is not None:
                 try:
                     if (row['config_hash'] != config_hash(c) or
                             git(repo, 'rev-parse', c['base_ref']) != row['base_sha'] or
@@ -944,7 +974,8 @@ def main(argv=None):
                     pass
             if row['review_json']:
                 row['review_json'] = json.loads(row['review_json'])
-        print(json.dumps({'tickets': rows, 'coordinator_locked': (home / 'coordinator.lock').exists()}, indent=2))
+        print(json.dumps({'tickets': rows, 'coordinator_locked': (home / 'coordinator.lock').exists(),
+                          'configuration_error': config_error}, indent=2))
         return 0
     if args.action == 'unlock':
         # A killed controller can leave coordinator.lock behind with no RUNNING ticket
@@ -991,6 +1022,7 @@ def main(argv=None):
     with lock(home):
         if args.action == 'reject':
             with connect(home) as con:
+                require_unheld(con, args.ticket)
                 row = con.execute('SELECT * FROM tickets WHERE id=?', (args.ticket,)).fetchone()
             if not row or row['state'] not in ('PENDING', 'BLOCKED', 'READY'):
                 raise FactoryError('Reject applies only to inactive unmerged tickets')
@@ -1003,6 +1035,7 @@ def main(argv=None):
             return 0
         if args.action == 'retry':
             with connect(home) as con:
+                require_unheld(con, args.ticket)
                 row = con.execute('SELECT * FROM tickets WHERE id=?', (args.ticket,)).fetchone()
                 if not row or row['state'] != 'BLOCKED':
                     raise FactoryError('Only BLOCKED tickets may be explicitly retried')
@@ -1013,6 +1046,8 @@ def main(argv=None):
             print(json.dumps({'id': args.ticket, 'state': 'PENDING', 'attempts_used': row['attempts'], 'maximum_attempts': 3}))
             return 0
         if args.action == 'publish':
+            with connect(home) as con:
+                require_unheld(con, args.ticket)
             try:
                 return publish(repo, home, c, args.ticket, args.execute)
             except TransientError:
@@ -1028,6 +1063,15 @@ def main(argv=None):
             t = validate_ticket(json.loads(Path(args.ticket).read_text()))
             validate_handoff(repo, t, required=c.get('workflow') == 'egm')
             with connect(home) as con:
+                existing = con.execute('SELECT * FROM tickets WHERE id=?', (t['id'],)).fetchone()
+                if existing:
+                    if not args.idempotent:
+                        raise FactoryError('Ticket already exists; use --idempotent only to replay identical content')
+                    if config_hash(json.loads(existing['ticket'])) != config_hash(t):
+                        raise FactoryError('Idempotent replay conflicts with existing ticket content')
+                    print(json.dumps({'id': t['id'], 'state': existing['state'], 'replayed': True,
+                                      'attempts_used': existing['attempts'], 'maximum_attempts': 3}))
+                    return 0
                 for dependency in t['depends_on']:
                     if not con.execute('SELECT id FROM tickets WHERE id=?', (dependency,)).fetchone():
                         raise FactoryError(f'Unknown dependency: {dependency}; add dependencies first')
@@ -1041,7 +1085,7 @@ def main(argv=None):
                     con.execute("UPDATE tickets SET state='REJECTED',error=?,updated=? WHERE id=?",
                                 ('Superseded by ' + t['id'] + '; history kept', time.time(), old))
                     record(con, old, 'REJECTED', {'action': 'superseded', 'by': t['id']})
-            print(json.dumps({'id': t['id'], 'state': 'PENDING', 'attempts_used': inherited,
+            print(json.dumps({'id': t['id'], 'state': 'PENDING', 'replayed': False, 'attempts_used': inherited,
                               'maximum_attempts': MAX_ATTEMPTS}))
             return 0
         if not 1 <= args.limit <= 2:
@@ -1053,6 +1097,7 @@ def main(argv=None):
             # Manual merges are recognized only by exact candidate ancestry.
             rows = [dict(r) for r in con.execute('SELECT * FROM tickets ORDER BY updated,id')]
             for row in rows:
+                row.update(control(con, row['id']))
                 # A merged head is merged even if review had already blocked it.
                 # Do not rewrite an unmerged BLOCKED ticket back to READY.
                 if row['state'] in ('READY', 'BLOCKED', 'MERGED') and row['head_sha']:
@@ -1114,6 +1159,6 @@ if __name__ == '__main__':
         print('factory: interrupted; owned child processes were killed and the lock released. '
               'Tickets that were in flight are BLOCKED and count as an attempt.', file=sys.stderr)
         sys.exit(130)
-    except (FactoryError, OSError, ValueError, KeyError, sqlite3.Error, subprocess.SubprocessError) as exc:
+    except (FactoryError, OSError, ValueError, KeyError, TypeError, sqlite3.Error, subprocess.SubprocessError) as exc:
         print(f'factory: {exc}', file=sys.stderr)
         sys.exit(2)
