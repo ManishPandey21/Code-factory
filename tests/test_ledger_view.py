@@ -52,5 +52,5 @@ class LedgerViewTests(unittest.TestCase):
             with self.assertRaises(HTTPError) as error:urlopen(Request(base+'/api/approve',data=b'{}'))
             self.assertEqual(error.exception.code,501)
             with urlopen(base+'/app.js') as response:
-                js=response.read().decode();self.assertNotIn('innerHTML',js);self.assertIn('textContent',js)
+                js=response.read().decode(encoding='utf-8');self.assertNotIn('innerHTML',js);self.assertIn('textContent',js)
         finally:httpd.shutdown();httpd.server_close();thread.join()

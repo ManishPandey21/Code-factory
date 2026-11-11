@@ -26,6 +26,8 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
+from path_safety import checked_path
+
 MAX_XML_BYTES = 16 * 1024 * 1024
 
 
@@ -33,11 +35,11 @@ class ReportError(ValueError):
     pass
 
 
-def no_symlinks(path):
-    path = Path(path).absolute()
-    if any(p.is_symlink() for p in (path, *path.parents)):
-        raise ReportError('Report paths must not contain symlinks')
-    return path
+def no_symlinks(path, *, root=None):
+    try:
+        return checked_path(path, root=root)
+    except ValueError as exc:
+        raise ReportError(str(exc)) from exc
 
 
 def native_path(value):
@@ -46,7 +48,7 @@ def native_path(value):
             any(c in value for c in '\\:*?\x00\n\r') or
             any(p.lower() in {'.git', '.infra-factory', '.claude', '.codex', '.agents', '.github'} for p in path.parts)):
         raise ReportError('--junit must be a literal relative path within the checkout')
-    return no_symlinks(Path.cwd() / path)
+    return no_symlinks(Path.cwd() / path, root=Path.cwd())
 
 
 def parse_junit(path):

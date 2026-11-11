@@ -113,7 +113,7 @@ class EvidenceTests(unittest.TestCase):
         self.good = {'status': 'passed', 'total': 3, 'passed': 3, 'failed': 0, 'skipped': 0}
         self.check = {'min_tests': 2}
 
-    def write(self, data): self.path.write_text(json.dumps(data))
+    def write(self, data): self.path.write_text(json.dumps(data), encoding='utf-8')
 
     def test_passing_counts(self):
         self.write(self.good)
@@ -131,12 +131,12 @@ class EvidenceTests(unittest.TestCase):
     def test_missing_malformed_duplicate_and_oversize(self):
         with self.assertRaises(PolicyError): validate_evidence(self.path, self.check)
         for content in ['not json', '[]', '{"status":"failed","status":"passed"}', ' ' * (1024 * 1024 + 1)]:
-            self.path.write_text(content)
+            self.path.write_text(content, encoding='utf-8')
             with self.assertRaises(PolicyError): validate_evidence(self.path, self.check)
 
     def test_report_or_parent_symlink_rejected(self):
         actual = Path(self.temp.name) / 'actual'; actual.mkdir()
-        (actual / 'report.json').write_text(json.dumps(self.good))
+        (actual / 'report.json').write_text(json.dumps(self.good), encoding='utf-8')
         self.path.symlink_to(actual / 'report.json')
         with self.assertRaises(PolicyError): validate_evidence(self.path, self.check)
         link = Path(self.temp.name) / 'link'; link.symlink_to(actual, target_is_directory=True)

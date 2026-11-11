@@ -70,7 +70,7 @@ def main(argv=None):
         if a.tdd_skill:
             p.error('Choose --skills-inventory or --tdd-skill, not both')
         try:
-            inventory = json.loads(a.skills_inventory.read_text())
+            inventory = json.loads(a.skills_inventory.read_text(encoding='utf-8'))
             skill, helpers = builder_skills(inventory)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             p.error(str(exc))
@@ -81,13 +81,13 @@ def main(argv=None):
         if not skill.is_file():
             p.error('--tdd-skill must point to the installed TDD SKILL.md')
     path = a.repo.resolve() / '.infra-factory/config.json'
-    c = json.loads(path.read_text())
+    c = json.loads(path.read_text(encoding='utf-8'))
     bridge = Path(__file__).with_name('agent_bridge.py').resolve()
     if bool(a.provider) != bool(a.model):
         p.error('--provider and --model must be supplied together')
     if a.review_policy:
         try:
-            c['review_policy'] = review_policy.validate(json.loads(a.review_policy.read_text()))
+            c['review_policy'] = review_policy.validate(json.loads(a.review_policy.read_text(encoding='utf-8')))
         except (OSError, ValueError, TypeError) as exc:
             p.error(str(exc))
     roles = ROLES + tuple(review_policy.required_commands(c.get('review_policy', {})))
@@ -125,7 +125,7 @@ def main(argv=None):
         if backup.exists():
             p.error('Backup already exists; review configuration manually before repeating --apply')
         backup.write_bytes(path.read_bytes())
-        path.write_text(json.dumps(c, indent=2) + '\n')
+        path.write_text(json.dumps(c, indent=2) + '\n', encoding='utf-8')
         print('Saved CLI mappings; review project checks and commit only intended factory configuration.',
               file=sys.stderr)
     return 0

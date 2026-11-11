@@ -28,7 +28,7 @@ class AssuranceTests(unittest.TestCase):
     states = FactoryTests.states
 
     def configure(self, risk=True, github=False):
-        c = json.loads(self.cfg.read_text())
+        c = json.loads(self.cfg.read_text(encoding='utf-8'))
         c['review_policy'] = copy.deepcopy(POLICY)
         if not risk: c['review_policy'].pop('risk')
         c['repair_policy'] = {'max_repairs': 2}
@@ -38,7 +38,7 @@ class AssuranceTests(unittest.TestCase):
                              '{result_file}', str(self.events)], 'stdin_prompt': False, 'model': 'fixture', 'primary_skill': str(self.skill)}
         c['commands'] = {k: spec('reviewer' if k.startswith('reviewer') else 'risk' if k == 'risk_assessor' else 'builder')
                          for k in ['backend','frontend','critical','reviewer','reviewer_security','risk_assessor']}
-        self.cfg.write_text(json.dumps(c));self.commit()
+        self.cfg.write_text(json.dumps(c), encoding='utf-8');self.commit()
 
     def approve(self, row, head=None, digest=None, code=0):
         return self.cli('approve', '--ticket', row['id'], '--head', head or row['head_sha'],
@@ -57,7 +57,7 @@ class AssuranceTests(unittest.TestCase):
         self.approve(row);self.cli('publish', '--ticket', 'A')
         self.assertEqual(self.states()['A']['state'], 'READY')
         artifact = Path(row['review_json']['risk']['artifact']['file'])
-        artifact.write_text('{}')
+        artifact.write_text('{}', encoding='utf-8')
         self.assertFalse(self.states()['A']['verification_current'])
         self.cli('publish', '--ticket', 'A', code=2)
 
@@ -102,14 +102,14 @@ class AssuranceTests(unittest.TestCase):
 
     def test_stricter_budget_blocks_retry_and_inherited_dispatch(self):
         self.configure(risk=False)
-        c=json.loads(self.cfg.read_text());c['repair_policy']['max_repairs']=1
-        self.cfg.write_text(json.dumps(c));self.commit()
+        c=json.loads(self.cfg.read_text(encoding='utf-8'));c['repair_policy']['max_repairs']=1
+        self.cfg.write_text(json.dumps(c), encoding='utf-8');self.commit()
         self.add('A',title='REPAIR ALWAYS');self.cli('run','--execute',code=1)
         row=self.states()['A']
         self.cli('repair','--ticket','A','--head',row['head_sha'],'--source','review','--execute',code=1)
         self.cli('retry','--ticket','A',code=2)
-        ticket=json.loads((self.home/'A.json').read_text());ticket.update(id='B',supersedes=['A'])
-        replacement=self.home/'B.json';replacement.write_text(json.dumps(ticket))
+        ticket=json.loads((self.home/'A.json').read_text(encoding='utf-8'));ticket.update(id='B',supersedes=['A'])
+        replacement=self.home/'B.json';replacement.write_text(json.dumps(ticket), encoding='utf-8')
         self.cli('add','--ticket',str(replacement));self.cli('run','--execute',code=2)
         self.assertEqual(self.states()['B']['attempts'],2)
 
@@ -118,7 +118,7 @@ class AssuranceTests(unittest.TestCase):
         row=self.states()['A'];self.cli('hold','--ticket','A','--hold-version','0','--reason','Inspect')
         self.git('merge','--ff-only',row['head_sha']);self.cli('run','--execute')
         self.assertEqual(self.states()['A']['state'],'MERGED')
-        (self.repo/'A.py').write_text('value = 41\n');self.commit()
+        (self.repo/'A.py').write_text('value = 41\n', encoding='utf-8');self.commit()
         self.add('B',paths=['A.py'],title='REPAIR');self.cli('run','--execute',code=1)
         row=self.states()['B']
         self.cli('repair','--ticket','B','--head',row['head_sha'],'--source','review','--execute')
@@ -126,7 +126,7 @@ class AssuranceTests(unittest.TestCase):
 
     def test_modified_review_artifact_cannot_feed_repair(self):
         self.configure(risk=False);self.add('A',title='REPAIR');self.cli('run','--execute',code=1)
-        row=self.states()['A'];Path(row['review_json']['lenses']['spec']['artifact']['file']).write_text('{}')
+        row=self.states()['A'];Path(row['review_json']['lenses']['spec']['artifact']['file']).write_text('{}', encoding='utf-8')
         self.cli('repair','--ticket','A','--head',row['head_sha'],'--source','review','--execute',code=2)
         self.assertEqual(self.states()['A']['attempts'],1)
 
@@ -172,8 +172,8 @@ class AssuranceTests(unittest.TestCase):
 
     def test_missing_specialist_command_fails_before_dispatch(self):
         self.configure();self.add('A')
-        c=json.loads(self.cfg.read_text());del c['commands']['reviewer_security']
-        self.cfg.write_text(json.dumps(c));self.commit()
+        c=json.loads(self.cfg.read_text(encoding='utf-8'));del c['commands']['reviewer_security']
+        self.cfg.write_text(json.dumps(c), encoding='utf-8');self.commit()
         self.cli('run','--execute',code=2)
         self.assertEqual(self.states()['A']['attempts'],0)
 

@@ -38,7 +38,7 @@ else:
 class AuditRegressions(_base.FactoryTests):
     def run_cli(self, action, *args, env=None):
         return subprocess.run([sys.executable, str(ROOT / 'factory.py'), action, '--repo', str(self.repo), *args],
-                              capture_output=True, text=True, env=env)
+                              capture_output=True, text=True, env=env, encoding='utf-8')
 
     def ledger(self, sql, *params):
         con = sqlite3.connect(self.repo / '.git/infra-factory/ledger.sqlite3')
@@ -62,13 +62,13 @@ class AuditRegressions(_base.FactoryTests):
         directory = self.home / 'bin'
         directory.mkdir(exist_ok=True)
         path = directory / name
-        path.write_text('#!' + sys.executable + '\n' + body)
+        path.write_text('#!' + sys.executable + '\n' + body, encoding='utf-8')
         path.chmod(0o755)
         return dict(os.environ, PATH=str(directory) + os.pathsep + os.environ['PATH'])
 
     def stale_lock(self):
         target = self.repo / '.git/infra-factory/coordinator.lock'
-        target.write_text(json.dumps({'pid': DEAD_PID, 'host': socket.gethostname()}))
+        target.write_text(json.dumps({'pid': DEAD_PID, 'host': socket.gethostname()}), encoding='utf-8')
         return target
 
     def test_unmerged_ready_candidate_holds_its_paths(self):
@@ -94,11 +94,11 @@ class AuditRegressions(_base.FactoryTests):
         self.cli('run', code=2)
         self.cli('unlock'); self.assertFalse(target.exists())
         self.cli('run')
-        target.write_text(json.dumps({'pid': os.getpid(), 'host': socket.gethostname()}))
+        target.write_text(json.dumps({'pid': os.getpid(), 'host': socket.gethostname()}), encoding='utf-8')
         self.cli('unlock', code=2); self.assertTrue(target.exists())
-        target.write_text(json.dumps({'pid': DEAD_PID, 'host': 'another-host'}))
+        target.write_text(json.dumps({'pid': DEAD_PID, 'host': 'another-host'}), encoding='utf-8')
         self.cli('unlock', code=2)
-        target.write_text('{}')
+        target.write_text('{}', encoding='utf-8')
         self.cli('unlock', code=2); self.assertTrue(target.exists())
 
     def test_unlock_defers_to_recover_for_in_flight_ticket(self):
@@ -111,7 +111,7 @@ class AuditRegressions(_base.FactoryTests):
 
     def test_cli_notices_on_stderr_do_not_break_publication(self):
         self.add('A'); self.cli('run', '--execute'); self.remote()
-        real = subprocess.check_output(['which', 'git'], text=True).strip()
+        real = subprocess.check_output(['which', 'git'], text=True, encoding='utf-8').strip()
         self.tool('git', "import os,sys\nif 'ls-remote' in sys.argv: print(\"Warning: Permanently added 'github.com' "
                          "(ED25519) to the list of known hosts.\", file=sys.stderr, flush=True)\n"
                          f"os.execv({real!r},[{real!r}]+sys.argv[1:])\n")
@@ -137,7 +137,7 @@ class AuditRegressions(_base.FactoryTests):
     def test_missing_gh_after_push_is_resumable(self):
         self.add('A'); self.cli('run', '--execute'); self.remote()
         empty = self.home / 'nogh'; empty.mkdir()
-        git_dir = str(Path(subprocess.check_output(['which', 'git'], text=True).strip()).parent)
+        git_dir = str(Path(subprocess.check_output(['which', 'git'], text=True, encoding='utf-8').strip()).parent)
         python_dir = str(Path(sys.executable).parent)
         self.tool('gh', 'raise SystemExit(4)\n')
         p = self.run_cli('publish', '--ticket', 'A', '--execute', env=dict(os.environ, PATH=os.pathsep.join([str(self.home / 'bin'), python_dir, git_dir])))
@@ -166,7 +166,7 @@ class AuditRegressions(_base.FactoryTests):
         names = ['package-lock.json', 'pnpm-lock.yaml', 'go.sum', 'tsconfig.json', 'setup.py', 'pkg/widget_test.go']
         (self.repo / 'pkg').mkdir()
         for name in names:
-            (self.repo / name).write_text('original\n')
+            (self.repo / name).write_text('original\n', encoding='utf-8')
         self.commit()
         for index, name in enumerate(names):
             ticket = 'L%d' % index
@@ -197,19 +197,19 @@ class AuditRegressions(_base.FactoryTests):
     def test_mixed_lens_verdict_is_not_mislabelled(self):
         sys.path.insert(0, str(ROOT))
         import factory
-        self.assertIn("'INCONCLUSIVE'", Path(factory.__file__).read_text().split('verdicts = {')[1][:260])
+        self.assertIn("'INCONCLUSIVE'", Path(factory.__file__).read_text(encoding='utf-8').split('verdicts = {')[1][:260])
 
     def test_sigterm_kills_agents_releases_lock_and_blocks_ticket(self):
         pid_file = self.home / 'builder.pid'; slow = self.home / 'slow.py'
-        slow.write_text(f'import os,time,pathlib\npathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))\ntime.sleep(60)\n')
-        c = json.loads(self.cfg.read_text()); c['commands']['backend']['argv'] = [sys.executable, str(slow)]; c['timeout_seconds'] = 120
-        self.cfg.write_text(json.dumps(c)); self.commit(); self.add('A')
+        slow.write_text(f'import os,time,pathlib\npathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))\ntime.sleep(60)\n', encoding='utf-8')
+        c = json.loads(self.cfg.read_text(encoding='utf-8')); c['commands']['backend']['argv'] = [sys.executable, str(slow)]; c['timeout_seconds'] = 120
+        self.cfg.write_text(json.dumps(c), encoding='utf-8'); self.commit(); self.add('A')
         p = subprocess.Popen([sys.executable, str(ROOT / 'factory.py'), 'run', '--repo', str(self.repo), '--execute'],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, encoding='utf-8')
         deadline = time.time() + 20
-        while time.time() < deadline and not (pid_file.exists() and pid_file.read_text()):
+        while time.time() < deadline and not (pid_file.exists() and pid_file.read_text(encoding='utf-8')):
             time.sleep(.05)
-        builder = int(pid_file.read_text())
+        builder = int(pid_file.read_text(encoding='utf-8'))
         p.send_signal(signal.SIGTERM)
         _, stderr = p.communicate(timeout=30)
         self.assertEqual(p.returncode, 130, stderr)
@@ -230,7 +230,7 @@ class AuditRegressions(_base.FactoryTests):
         hooks = self.repo / '.git/hooks'
         hooks.mkdir(exist_ok=True)
         hook = hooks / 'pre-commit'
-        hook.write_text('#!/bin/sh\ngit mv -f README.md smuggled.txt\nexit 0\n')
+        hook.write_text('#!/bin/sh\ngit mv -f README.md smuggled.txt\nexit 0\n', encoding='utf-8')
         hook.chmod(0o755)
         self.add('A')
         self.cli('run', '--execute')
@@ -246,14 +246,14 @@ class AuditRegressions(_base.FactoryTests):
         subprocess.check_call(['git', 'init', '-q', '-b', 'main', str(work)])
         subprocess.check_call(['git', '-C', str(work), 'config', 'user.email', 'test@example.invalid'])
         subprocess.check_call(['git', '-C', str(work), 'config', 'user.name', 'Factory Test'])
-        (work / 'README.md').write_text('secret policy\n')
+        (work / 'README.md').write_text('secret policy\n', encoding='utf-8')
         subprocess.check_call(['git', '-C', str(work), 'add', '.'])
         subprocess.check_call(['git', '-C', str(work), 'commit', '-qm', 'base'])
-        base = subprocess.check_output(['git', '-C', str(work), 'rev-parse', 'HEAD'], text=True).strip()
+        base = subprocess.check_output(['git', '-C', str(work), 'rev-parse', 'HEAD'], text=True, encoding='utf-8').strip()
         subprocess.check_call(['git', '-C', str(work), 'mv', 'README.md', 'keep.py'])
         subprocess.check_call(['git', '-C', str(work), 'commit', '-qm', 'rename'])
-        head = subprocess.check_output(['git', '-C', str(work), 'rev-parse', 'HEAD'], text=True).strip()
-        shown = subprocess.check_output(['git', '-C', str(work), 'diff', '--name-only', base, head], text=True)
+        head = subprocess.check_output(['git', '-C', str(work), 'rev-parse', 'HEAD'], text=True, encoding='utf-8').strip()
+        shown = subprocess.check_output(['git', '-C', str(work), 'diff', '--name-only', base, head], text=True, encoding='utf-8')
         self.assertNotIn('README.md', shown.split())
         with self.assertRaises(factory.FactoryError) as caught:
             factory.assert_committed_scope(work, {'paths': ['keep.py']}, base, head)
@@ -288,10 +288,10 @@ for _name in dir(_base.FactoryTests):  # inherit the fixture, not a second copy 
 class BridgeCredentialRegressions(unittest.TestCase):
     def bridge(self, provider, cli_body, concurrent_change=False):
         with tempfile.TemporaryDirectory() as td:
-            d = Path(td); (d / 'prompt.txt').write_text('Review')
+            d = Path(td); (d / 'prompt.txt').write_text('Review', encoding='utf-8')
             home = d / 'home'; config = home / ('.codex' if provider == 'codex' else '.claude'); config.mkdir(parents=True)
             name = 'auth.json' if provider == 'codex' else '.credentials.json'
-            credential = config / name; credential.write_text('{"refresh":"old"}'); credential.chmod(0o600)
+            credential = config / name; credential.write_text('{"refresh":"old"}', encoding='utf-8'); credential.chmod(0o600)
             key = 'CODEX_HOME' if provider == 'codex' else 'CLAUDE_CONFIG_DIR'
             body = ('import json,os,sys\nfrom pathlib import Path\n'
                     f"assert os.environ.get('HTTPS_PROXY')=='http://proxy.invalid:8080'\n"
@@ -299,14 +299,14 @@ class BridgeCredentialRegressions(unittest.TestCase):
                     (f"Path({str(credential)!r}).write_text('{{\"refresh\":\"other-session\"}}')\n" if concurrent_change else '') +
                     ("Path(sys.argv[sys.argv.index('--output-last-message')+1]).write_text('{}')\n" if provider == 'codex'
                      else "print(json.dumps({'result':'{}'}))\n"))
-            fixture = d / provider; fixture.write_text('#!' + sys.executable + '\n' + body); fixture.chmod(0o755)
+            fixture = d / provider; fixture.write_text('#!' + sys.executable + '\n' + body, encoding='utf-8'); fixture.chmod(0o755)
             env = {'PATH': str(d) + os.pathsep + os.environ['PATH'], 'HOME': str(home), key: str(config),
                    'HTTPS_PROXY': 'http://proxy.invalid:8080', 'GITHUB_TOKEN': 'must-not-inherit'}
             p = subprocess.run([sys.executable, str(ROOT / 'agent_bridge.py'), '--provider', provider, '--mode', 'reviewer',
                                 '--model', 'fixture', '--prompt-file', str(d / 'prompt.txt'), '--result-file', str(d / 'result.json')],
-                               env=env, capture_output=True, text=True)
+                               env=env, capture_output=True, text=True, encoding='utf-8')
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-            return credential.read_text(), credential.stat().st_mode & 0o777, sorted(x.name for x in config.iterdir()), p.stderr
+            return credential.read_text(encoding='utf-8'), credential.stat().st_mode & 0o777, sorted(x.name for x in config.iterdir()), p.stderr
 
     def test_refreshed_login_is_written_back(self):
         for provider in ('codex', 'claude'):

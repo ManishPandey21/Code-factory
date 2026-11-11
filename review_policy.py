@@ -2,14 +2,15 @@
 import fnmatch
 import hashlib
 import json
-from pathlib import Path
 import re
+
+from path_safety import checked_path
 
 LEVELS = ('low', 'medium', 'high', 'critical')
 
 
 def digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode(encoding='utf-8')).hexdigest()
 
 
 def patterns(value):
@@ -104,10 +105,10 @@ def check_risk(record, policy, files, head, base, critical=False):
     if any(record.get(k) != v for k, v in expected.items()):
         raise ValueError('Risk evidence policy or candidate mismatch')
     artifact = record.get('artifact', {})
-    path = Path(artifact.get('file', ''))
-    if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != artifact.get('sha256'):
+    path = checked_path(artifact.get('file', ''))
+    if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != artifact.get('sha256'):
         raise ValueError('Risk assessment artifact missing or changed')
-    if json.loads(path.read_text()) != record['assessment']:
+    if json.loads(path.read_text(encoding='utf-8')) != record['assessment']:
         raise ValueError('Risk assessment differs from its recorded artifact')
     return record
 

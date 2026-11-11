@@ -7,11 +7,27 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from ticket_controls import control
+from repair import validate_policy as validate_repair_policy
 
 
-def snapshot(home, after=0, limit=100):
+def configured_attempt_limit(repo):
+    if repo is None:
+        return None
+    try:
+        config = json.loads((Path(repo) / '.infra-factory/config.json').read_text(encoding='utf-8'))
+        if not isinstance(config, dict):
+            return None
+        policy = config.get('repair_policy')
+        validate_repair_policy(policy)
+        return (policy or {}).get('max_repairs', 2) + 1
+    except (OSError, ValueError, TypeError):
+        return None  # keep historical state readable with missing/broken config
+
+
+def snapshot(home, after=0, limit=100, *, repo=None):
     if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 500:
         raise ValueError('after must be nonnegative; limit must be between 1 and 500')
+    maximum_attempts = configured_attempt_limit(repo)
     con = sqlite3.connect((home / 'ledger.sqlite3').resolve().as_uri() + '?mode=ro', uri=True, timeout=5)
     con.row_factory = sqlite3.Row
     try:
@@ -21,7 +37,7 @@ def snapshot(home, after=0, limit=100):
             review = json.loads(r['review_json']) if r['review_json'] else {}
             risk = review.get('risk', {})
             tickets.append({'id': r['id'], 'title': json.loads(r['ticket'])['title'], 'state': r['state'],
-                            'head': r['head_sha'], 'attempts': r['attempts'], 'updated': r['updated'],
+                            'head': r['head_sha'], 'attempts': r['attempts'], 'maximum_attempts': maximum_attempts, 'updated': r['updated'],
                             'risk': risk.get('level'), 'human_required': risk.get('requires_human', False),
                             'human_reviewer': review.get('human_approval', {}).get('reviewer'),
                             'error': r['error'], 'pr_url': r['pr_url'], **control(con, r['id'])})
@@ -41,9 +57,9 @@ def snapshot(home, after=0, limit=100):
         con.close()
 
 
-def events(home, after, limit, follow):
+def events(home, after, limit, follow, *, repo=None):
     while True:
-        data = snapshot(home, after, limit)
+        data = snapshot(home, after, limit, repo=repo)
         print(json.dumps(data), flush=True)
         after = data['cursor']
         if not follow:
@@ -52,7 +68,7 @@ def events(home, after, limit, follow):
             time.sleep(2)
 
 
-def server(home, port=8765):
+def server(home, port=8765, *, repo=None):
     assets = Path(__file__).with_name('web')
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -83,8 +99,8 @@ def server(home, port=8765):
             elif url.path == '/api/snapshot':
                 try:
                     args = parse_qs(url.query)
-                    data = snapshot(home, int(args.get('after', ['0'])[0]), int(args.get('limit', ['100'])[0]))
-                    self.send(200, json.dumps(data).encode())
+                    data = snapshot(home, int(args.get('after', ['0'])[0]), int(args.get('limit', ['100'])[0]), repo=repo)
+                    self.send(200, json.dumps(data).encode(encoding='utf-8'))
                 except (ValueError, KeyError, TypeError, sqlite3.Error, OSError):
                     self.send(400, b'{"error":"Invalid cursor/limit or ledger unavailable"}')
             else:
@@ -94,8 +110,8 @@ def server(home, port=8765):
     return ThreadingHTTPServer(('127.0.0.1', port), Handler)
 
 
-def serve(home, port):
-    httpd = server(home, port)
+def serve(home, port, *, repo=None):
+    httpd = server(home, port, repo=repo)
     print(f'Factory ledger: http://127.0.0.1:{httpd.server_port} (read only)', flush=True)
     try:
         httpd.serve_forever(poll_interval=.5)

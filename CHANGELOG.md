@@ -1,5 +1,15 @@
 # 0.4.2 — durable ticket controls and skill navigation
 
+## Unreleased — Local pilot audit hardening
+
+- Auto-protect repository paths referenced by checks/verification argv, including base-only deleted inputs.
+- Require Git >= 2.29 before controller or cold-checkout work.
+- Use explicit UTF-8 text I/O and check path components below trusted roots, allowing OS temporary-root aliases while rejecting internal links/reparse points.
+- Reject malformed GitHub API shapes with controlled errors before repair allocation.
+- Accept legacy pinned Claude model IDs, allowlist ledger update columns, and display the configured attempt budget.
+- Keep AUDIT.md production blockers explicit; native macOS/Windows pilots and external trust infrastructure remain outstanding.
+
+
 ## 0.5.0 — Candidate assurance and live operations
 
 - Select specialist lenses from actual changed paths and project policy; retain mandatory standards/spec reviews.

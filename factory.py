@@ -31,6 +31,9 @@ import threading
 import time
 
 import review_policy
+from check_paths import referenced_paths
+from runtime_requirements import require_git_version
+from path_safety import checked_path
 from ticket_controls import control, require_unheld, change_control
 from skill_inventory import helper_prompt, skill_files, validate_inventory
 from egm import validate_handoff
@@ -55,8 +58,8 @@ class TransientError(FactoryError):
 def git(repo, *args):
     p = subprocess.run(['git', '-C', str(repo), *args], capture_output=True, timeout=60)
     if p.returncode:
-        raise FactoryError(p.stderr.decode(errors='replace').strip())
-    return p.stdout.decode(errors='surrogateescape').strip()
+        raise FactoryError(p.stderr.decode(errors='replace', encoding='utf-8').strip())
+    return p.stdout.decode(errors='surrogateescape', encoding='utf-8').strip()
 
 
 def locations(repo):
@@ -131,7 +134,7 @@ def initialize_db(home):
 
 
 def config_hash(c):
-    return hashlib.sha256(json.dumps(c, sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(c, sort_keys=True).encode(encoding='utf-8')).hexdigest()
 
 
 def alive(pid):
@@ -178,7 +181,7 @@ def lock(home, filename='coordinator.lock'):
         raise FactoryError(f'{filename} exists; no automatic lock stealing. After verifying its owner exited, use '
                            'recover --ticket ID for a stale RUNNING/REVIEWING ticket, or unlock when no ticket is in flight.')
     try:
-        with os.fdopen(fd, 'w') as f:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump({'pid': os.getpid(), 'host': socket.gethostname()}, f)
             f.flush()
             os.fsync(f.fileno())
@@ -188,7 +191,7 @@ def lock(home, filename='coordinator.lock'):
 
 
 def config(repo):
-    c = json.loads((repo / '.infra-factory/config.json').read_text())
+    c = json.loads((repo / '.infra-factory/config.json').read_text(encoding='utf-8'))
     if not isinstance(c, dict) or c.get('version') != 1 or not isinstance(c.get('base_ref'), str):
         raise FactoryError('Invalid config version/base_ref')
     if not isinstance(c.get('timeout_seconds'), (int, float)) or c['timeout_seconds'] <= 0:
@@ -261,7 +264,7 @@ def routing_evidence(result_path, spec):
         if strict_routing(spec):
             raise FactoryError(f'Missing routing evidence {path.name} for a strict-routing command')
         return None
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding='utf-8'))
     if not isinstance(data, dict) or data.get('outcome') != 'ok':
         raise FactoryError(f'Routing evidence {path.name} does not record a successful run')
     if strict_routing(spec):
@@ -388,7 +391,7 @@ def assert_committed_scope(repo, ticket, base, head):
 def dirty(repo, allow_config=False):
     # Porcelain -z avoids ambiguity from spaces, quotes and newlines in filenames.
     raw = subprocess.check_output(['git', '-C', str(repo), 'status', '--porcelain=v1', '-z', '--untracked-files=all'], timeout=60)
-    fields = raw.decode(errors='surrogateescape').split('\0')
+    fields = raw.decode(errors='surrogateescape', encoding='utf-8').split('\0')
     paths = []
     i = 0
     while i < len(fields):
@@ -415,7 +418,13 @@ def scoped(worktree, ticket, base):
     return paths
 
 
+UPDATE_FIELDS = frozenset({'branch', 'worktree', 'base_sha', 'head_sha', 'review_json', 'error',
+                           'owner_pid', 'owner_host', 'config_hash', 'checks_json', 'pr_url', 'attempts'})
+
+
 def update(home, ticket_id, state, repair_request=None, **kwargs):
+    if set(kwargs) - UPDATE_FIELDS:
+        raise FactoryError('Unknown ticket update column')
     values = {'state': state, 'updated': time.time(), **kwargs}
     with connect(home) as con:
         if repair_request is not None:
@@ -476,7 +485,7 @@ def invoke(args, cwd, log, timeout, prompt=None, env=None, split_stderr=False):
         try:
             if STOP.is_set():
                 kill_tree(p)
-            p.communicate(prompt.encode() if prompt is not None else None, timeout=timeout)
+            p.communicate(prompt.encode(encoding='utf-8') if prompt is not None else None, timeout=timeout)
         except BaseException:
             kill_tree(p)
             p.wait()
@@ -490,14 +499,17 @@ def invoke(args, cwd, log, timeout, prompt=None, env=None, split_stderr=False):
 
 
 def run_agent(spec, wt, prompt_path, result_path, log, timeout, prompt):
-    prompt_path.write_text(prompt)
+    prompt_path.write_text(prompt, encoding='utf-8')
     args = command(spec, {'worktree': wt, 'prompt_file': prompt_path, 'result_file': result_path, 'model': spec.get('model', '')})
     invoke(args, wt, log, timeout, prompt if spec.get('stdin_prompt', False) else None)
 
 
 def sha_file(path):
-    path = Path(path)
-    if path.is_symlink() or not path.is_file():
+    try:
+        path = checked_path(path)
+    except ValueError as exc:
+        raise FactoryError(str(exc)) from exc
+    if not path.is_file():
         raise FactoryError('Missing or symlinked evidence: ' + str(path))
     h = hashlib.sha256()
     with path.open('rb') as stream:
@@ -568,7 +580,7 @@ def cold_checks(checkout, logs, c, ticket, base, head, checks):
     if dirty(checkout) or git(checkout, 'rev-parse', 'HEAD') != head:
         raise FactoryError('Cold verification changed candidate')
     evidence['digest'] = config_hash(evidence)
-    (logs / 'manifest.json').write_text(json.dumps(evidence, indent=2))
+    (logs / 'manifest.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
     return evidence
 
 
@@ -624,12 +636,18 @@ def verification_sensitive(path):
     return test, config_file
 
 
-def guard_verification_inputs(repo, ticket, base, head, c):
+def guard_verification_inputs(repo, ticket, base, head, c, source_repo=None):
     """Existing tests and runners require a separate policy-maintenance workflow.
 
     This is regression resistance, not protection from a malicious OS peer.
     """
+    tracked = set(git(repo, 'ls-tree', '-r', '--name-only', '-z', base).split('\0'))
+    tracked.update(git(repo, 'ls-tree', '-r', '--name-only', '-z', head).split('\0'))
+    tracked.discard('')
+    check_paths = referenced_paths(c, repo, tracked, source_repo)
     for status, path in changed_entries(repo, base, head):
+        if any(p == '.' or within(path, p) for p in check_paths):
+            raise FactoryError('Configured check input requires separate policy review: ' + path)
         test, config_file = verification_sensitive(path)
         if config_file or (test and status != 'A') or any(within(path, p) for p in c.get('protected_paths', [])):
             raise FactoryError('Verification-sensitive change requires separate policy review: ' + path)
@@ -707,7 +725,7 @@ def execute_ticket(repo, home, c, ticket, base, repair=None, repair_request=None
         if git(work, 'rev-parse', 'HEAD^') != base:
             raise FactoryError('Candidate is not exactly one commit above base')
         assert_committed_scope(work, ticket, base, head)
-        guard_verification_inputs(work, ticket, base, head, c)
+        guard_verification_inputs(work, ticket, base, head, c, source_repo=repo)
         validate_handoff(work, ticket, required=c.get('workflow') == 'egm')
         update(home, tid, 'REVIEWING', head_sha=head)
         files = diff_paths(work, base, head)
@@ -745,7 +763,7 @@ def execute_ticket(repo, home, c, ticket, base, repair=None, repair_request=None
             run_agent(reviewer_spec, checkout, logs / ('review-' + lens + '-prompt.txt'), result,
                       logs / ('review-' + lens + '.log'), c['timeout_seconds'], prompt)
             reviewer_routing = routing_evidence(result, reviewer_spec)
-            review = json.loads(result.read_text())
+            review = json.loads(result.read_text(encoding='utf-8'))
             if review.get('verdict') not in ('PASS', 'CHANGES_REQUIRED', 'INCONCLUSIVE') or not isinstance(review.get('findings'), list):
                 raise FactoryError('Malformed review result')
             if review.get('reviewed_head') != head or review.get('base') != base:
@@ -780,7 +798,7 @@ def execute_ticket(repo, home, c, ticket, base, repair=None, repair_request=None
                       json.dumps(ticket, indent=2) + '\nCHANGED_FILES\n' + json.dumps(files))
             spec = c['commands']['risk_assessor']
             run_agent(spec, checkout, logs / 'risk-prompt.txt', result, logs / 'risk.log', c['timeout_seconds'], prompt)
-            risk = review_policy.assess(policy, json.loads(result.read_text()), files, head, base, ticket['role'] == 'critical')
+            risk = review_policy.assess(policy, json.loads(result.read_text(encoding='utf-8')), files, head, base, ticket['role'] == 'critical')
             routing = routing_evidence(result, spec)
             if routing:
                 risk['routing'] = routing
@@ -857,6 +875,7 @@ def verify_candidate(repo, c, row, require_pass=True, require_approval=True):
     if (require_pass and review.get('verdict') != 'PASS') or review.get('reviewed_head') != head or review.get('base') != base:
         raise FactoryError('Review does not match candidate')
     ticket = json.loads(row['ticket'])
+    guard_verification_inputs(work, ticket, base, head, c, source_repo=repo)
     files = diff_paths(work, base, head)
     policy = c.get('review_policy', {})
     if set(review.get('lenses', {})) != set(review_policy.lenses(policy, files)):
@@ -866,16 +885,15 @@ def verify_candidate(repo, c, row, require_pass=True, require_approval=True):
         if ((require_pass and (r.get('verdict') != 'PASS' or r.get('findings') != [])) or
                 r.get('reviewed_head') != head or r.get('base') != base):
             raise FactoryError('Every required exact-head review lens must pass')
-    ticket = json.loads(row['ticket'])
     validate_handoff(work, ticket, required=c.get('workflow') == 'egm')
     validate_handoff(repo, ticket, required=c.get('workflow') == 'egm')
-    selected_checks = validate_policy(c, ticket)
+    validate_policy(c, ticket)
     for r in review['lenses'].values():
         artifact = r.get('artifact')
         if artifact:
             if sha_file(artifact['file']) != artifact['sha256']:
                 raise FactoryError('Review result artifact changed')
-            raw = json.loads(Path(artifact['file']).read_text())
+            raw = json.loads(Path(artifact['file']).read_text(encoding='utf-8'))
             if raw != {k: v for k, v in r.items() if k not in ('artifact', 'evidence', 'routing')}:
                 raise FactoryError('Review differs from original result artifact')
         elif c.get('repair_policy') is not None:
@@ -911,7 +929,6 @@ def publish(repo, home, c, ticket_id, execute):
     checks = json.loads(row['checks_json'])
     head, base, branch = row['head_sha'], row['base_sha'], row['branch']
     work = Path(row['worktree'])
-    ticket = json.loads(row['ticket'])
     print(json.dumps({'dry_run': not execute, 'ticket': ticket_id, 'head': head, 'base': base, 'branch': branch, 'draft': True}), flush=True)
     if not execute:
         return 0
@@ -929,7 +946,7 @@ def publish(repo, home, c, ticket_id, execute):
             output = logs / ('remote-base-' + label + '.txt')
             remote_ref = c['base_ref'] if c['base_ref'].startswith('refs/heads/') else 'refs/heads/' + c['base_ref']
             remote(['git', 'ls-remote', '--exit-code', 'origin', remote_ref], output)
-            lines = output.read_text().splitlines()
+            lines = output.read_text(encoding='utf-8').splitlines()
             expected = base + '\t' + remote_ref
             if lines != [expected]:
                 raise FactoryError('Origin base differs from reviewed base; fresh checks/review required')
@@ -945,7 +962,7 @@ def publish(repo, home, c, ticket_id, execute):
             output = logs / filename
             remote(['gh', 'pr', 'list', '--state', 'open', '--head', branch, '--base', c['base_ref'],
                     '--json', 'url,isDraft,headRefOid'], output)
-            return json.loads(output.read_text())
+            return json.loads(output.read_text(encoding='utf-8'))
         prs = lookup_pr('pr-lookup.json')
         if prs:
             if len(prs) != 1 or not prs[0]['isDraft'] or prs[0]['headRefOid'] != head:
@@ -957,7 +974,7 @@ def publish(repo, home, c, ticket_id, execute):
             body.write_text(f"Ticket: {ticket_id}\n\nCandidate: {head}\nBase: {base}\n\n"
                             'LOCAL verification only: independently executed policy-selected tests and every policy-selected cold review passed on this exact commit.\n\n'
                             'Evidence digests: ' + ', '.join(checks['cold'].values()) + '\n\n'
-                            'This draft requires human review and merge. No automatic merge is enabled.\n')
+                            'This draft requires human review and merge. No automatic merge is enabled.\n', encoding='utf-8')
             remote(['gh', 'pr', 'create', '--draft', '--base', c['base_ref'], '--head', branch,
                     '--title', (ticket_id + ': ' + t['title']).replace('\n', ' ')[:200], '--body-file', str(body)],
                    logs / 'pr-create.log')
@@ -1020,6 +1037,7 @@ def main(argv=None):
         if name == 'run':
             p.add_argument('--limit', type=int, default=2)
     args = parser.parse_args(argv)
+    require_git_version()
     repo, home = locations(args.repo)
     git(repo, 'rev-parse', '--verify', 'HEAD')
     cfg = repo / '.infra-factory/config.json'
@@ -1031,7 +1049,7 @@ def main(argv=None):
         with lock(home):
             cfg.parent.mkdir(exist_ok=True)
             if not cfg.exists():
-                with cfg.open('x') as f:
+                with cfg.open('x', encoding='utf-8') as f:
                     json.dump(default_config(repo), f, indent=2)
             initialize_db(home)
         print('Initialized; configure nonempty checks and authenticated CLI commands before execution.')
@@ -1042,9 +1060,9 @@ def main(argv=None):
     if args.action in ('events', 'dashboard'):
         from ledger_view import serve, events
         if args.action == 'dashboard':
-            serve(home, args.port)
+            serve(home, args.port, repo=repo)
         else:
-            events(home, args.after, args.limit, args.follow)
+            events(home, args.after, args.limit, args.follow, repo=repo)
         return 0
     if args.action in ('hold', 'release'):
         with lock(home), connect(home) as con:
@@ -1090,7 +1108,7 @@ def main(argv=None):
                 print('No coordinator lock is present.')
                 return 0
             try:
-                owner = json.loads(target.read_text())
+                owner = json.loads(target.read_text(encoding='utf-8'))
             except ValueError:
                 owner = None
             if (not isinstance(owner, dict) or owner.get('host') != socket.gethostname()
@@ -1114,7 +1132,7 @@ def main(argv=None):
                 raise FactoryError('Ticket owner is alive or unknown; refusing recovery')
             target = home / 'coordinator.lock'
             if target.exists():
-                owner = json.loads(target.read_text())
+                owner = json.loads(target.read_text(encoding='utf-8'))
                 if owner.get('host') != socket.gethostname() or alive(owner.get('pid')):
                     raise FactoryError('Lock owner is alive or cannot be verified local; refusing recovery')
                 target.unlink()
@@ -1183,7 +1201,7 @@ def main(argv=None):
                         update(home, args.ticket, 'BLOCKED', error='Publication eligibility revoked: ' + str(exc))
                 raise
         if args.action == 'add':
-            t = validate_ticket(json.loads(Path(args.ticket).read_text()))
+            t = validate_ticket(json.loads(Path(args.ticket).read_text(encoding='utf-8')))
             validate_handoff(repo, t, required=c.get('workflow') == 'egm')
             with connect(home) as con:
                 existing = con.execute('SELECT * FROM tickets WHERE id=?', (t['id'],)).fetchone()

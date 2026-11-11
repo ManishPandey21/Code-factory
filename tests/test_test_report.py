@@ -23,7 +23,7 @@ class NativeReportTests(unittest.TestCase):
         args = [sys.executable, str(ROOT / 'test_report.py'), '--report', str(self.report),
                 '--junit', kwargs.pop('junit', 'native.xml'), '--timeout', str(kwargs.pop('timeout', 5)),
                 '--', sys.executable, '-c', code]
-        result = subprocess.run(args, cwd=self.cwd, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(args, cwd=self.cwd, capture_output=True, text=True, timeout=10, encoding='utf-8')
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return result
 
@@ -32,7 +32,7 @@ class NativeReportTests(unittest.TestCase):
 
     def test_actual_native_testcase_counts_written(self):
         self.cli(self.writer('<testsuites><testsuite tests="2"><testcase name="one"/><testcase name="two"/></testsuite></testsuites>'))
-        self.assertEqual(json.loads(self.report.read_text()),
+        self.assertEqual(json.loads(self.report.read_text(encoding='utf-8')),
                          {'status': 'passed', 'total': 2, 'passed': 2, 'failed': 0, 'skipped': 0})
 
     def test_nonzero_exit_rejects_even_green_native_report(self):
@@ -54,14 +54,14 @@ class NativeReportTests(unittest.TestCase):
                 self.assertFalse(self.report.exists())
 
     def test_preexisting_native_never_reused(self):
-        self.native.write_text('<testsuite><testcase/></testsuite>')
+        self.native.write_text('<testsuite><testcase/></testsuite>', encoding='utf-8')
         self.cli('raise SystemExit("command should not run")', expected=2)
         self.assertFalse(self.report.exists())
 
     def test_preexisting_normalized_is_not_overwritten(self):
-        self.report.write_text('original')
+        self.report.write_text('original', encoding='utf-8')
         self.cli(self.writer('<testsuite><testcase/></testsuite>'), expected=2)
-        self.assertEqual(self.report.read_text(), 'original')
+        self.assertEqual(self.report.read_text(encoding='utf-8'), 'original')
         self.assertFalse(self.native.exists())
 
     def test_timeout_has_no_normalized_report(self):
@@ -86,7 +86,7 @@ class NativeReportTests(unittest.TestCase):
         code = self.writer('<testsuite><testcase/></testsuite>').split('; raise SystemExit')[0]
         code += '; Path("normalized.json").write_text("untrusted")'
         self.cli(code, expected=2)
-        self.assertEqual(self.report.read_text(), 'untrusted')
+        self.assertEqual(self.report.read_text(encoding='utf-8'), 'untrusted')
 
     def test_unsafe_and_oversized_xml_rejected(self):
         for raw in [b'<!DOCTYPE x [<!ENTITY x "entity">]><testsuite><testcase/></testsuite>',

@@ -1,4 +1,4 @@
-> Historical v0.3.x validation. For current results see [VALIDATION_V050.md](VALIDATION_V050.md).
+> Historical v0.3.x validation. For the latest local hardening checks see [VALIDATION_HARDENING.md](VALIDATION_HARDENING.md); published v0.5.0 evidence is in [VALIDATION_V050.md](VALIDATION_V050.md).
 
 # Validation evidence
 
