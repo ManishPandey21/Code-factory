@@ -36,9 +36,9 @@ event in the same database transaction. A stale release cannot clear a newer
 hold. Changing prompts/configuration, re-running init or restarting the CLI never
 releases a hold. Nothing is sent to GitHub by these commands.
 
-Only inactive PENDING, BLOCKED or READY tickets accept hold/release commands.
+Only inactive PENDING, BLOCKED, READY or AWAITING_HUMAN tickets accept hold/release commands.
 RUNNING/REVIEWING work must first stop; use the existing interruption and recovery
-procedures. A held ticket cannot dispatch, retry, publish, be rejected or be
+procedures. A held ticket cannot dispatch, retry, repair, approve, publish, be rejected or be
 superseded. It reserves its paths while inactive and unmerged, so another pending
 ticket cannot simply take over those paths. Unrelated tickets can still run.
 Release a hold explicitly before rejecting or replacing its ticket.
