@@ -83,12 +83,16 @@ def repair_candidate(f, repo, home, c, args):
     with f.connect(home) as con:
         f.require_unheld(con, args.ticket)
         row = con.execute('SELECT * FROM tickets WHERE id=?', (args.ticket,)).fetchone()
+        table = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='repair_requests'").fetchone()
+        if table and con.execute('SELECT 1 FROM repair_requests WHERE ticket_id=? AND head=?',
+                                 (args.ticket, args.head)).fetchone():
+            raise ValueError('This candidate already has a consumed repair request; inspect retained attempt history')
         rows = [dict(r) for r in con.execute('SELECT * FROM tickets')]
         for other in rows:
             other.update(f.control(con, other['id']))
     if not row or row['state'] not in ('BLOCKED', 'READY', 'AWAITING_HUMAN') or row['head_sha'] != args.head:
         raise ValueError('Repair requires the exact inactive candidate head')
-    if row['attempts'] >= min(f.MAX_ATTEMPTS, policy['max_repairs'] + 1):
+    if row['attempts'] >= f.attempt_limit(c):
         raise ValueError('Repair/attempt budget exhausted; history cannot be reset')
     ticket = json.loads(row['ticket'])
     for other in rows:
@@ -96,7 +100,7 @@ def repair_candidate(f, repo, home, c, args):
             continue
         if other['state'] in ('RUNNING', 'REVIEWING'):
             raise ValueError('Recover stale in-flight work before repair')
-        if ((other['state'] in ('READY', 'AWAITING_HUMAN') or other['hold_reason'] is not None) and
+        if (f.reserved(other) and
                 f.overlap(ticket['paths'], json.loads(other['ticket'])['paths'])):
             raise ValueError('Repair paths overlap another reserved ticket')
     review = f.verify_candidate(repo, c, row, require_pass=False, require_approval=False)
@@ -133,14 +137,11 @@ def repair_candidate(f, repo, home, c, args):
     receipt = home / 'logs' / ('repair-' + str(time.time_ns()) + '.json')
     receipt.parent.mkdir(exist_ok=True)
     receipt.write_text(json.dumps({'evidence': evidence, 'github': raw}, indent=2))
-    with f.connect(home) as con:
-        con.execute('''CREATE TABLE IF NOT EXISTS repair_requests (
-            ticket_id TEXT NOT NULL, head TEXT NOT NULL, receipt TEXT NOT NULL,
-            PRIMARY KEY(ticket_id,head))''')
-        con.execute('INSERT INTO repair_requests VALUES(?,?,?)', (args.ticket, args.head, str(receipt)))
-        f.record(con, args.ticket, row['state'], {'action': 'repair', 'head': args.head,
-                 'source': args.source, 'receipt': str(receipt), 'sha256': f.sha_file(receipt)})
-    f.execute_ticket(repo, home, c, ticket, row['base_sha'], repair=evidence)
+    request = {'head': args.head, 'source': args.source, 'receipt': str(receipt), 'sha256': f.sha_file(receipt)}
+    # Claim, event and attempt transition commit atomically inside execute_ticket.
+    # A crash before that transition leaves no consumed candidate; after it the
+    # existing RUNNING recovery path applies and the attempt remains counted.
+    f.execute_ticket(repo, home, c, ticket, row['base_sha'], repair=evidence, repair_request=request)
     with f.connect(home) as con:
         state = con.execute('SELECT state FROM tickets WHERE id=?', (args.ticket,)).fetchone()[0]
     print(json.dumps({'ticket': args.ticket, 'state': state}))

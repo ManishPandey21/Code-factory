@@ -99,11 +99,52 @@ class AssuranceTests(unittest.TestCase):
         row=self.states()['A']
         self.cli('repair','--ticket','A','--head',row['head_sha'],'--source','review','--execute',code=2)
 
+    def test_stricter_budget_blocks_retry_and_inherited_dispatch(self):
+        self.configure(risk=False)
+        c=json.loads(self.cfg.read_text());c['repair_policy']['max_repairs']=1
+        self.cfg.write_text(json.dumps(c));self.commit()
+        self.add('A',title='REPAIR ALWAYS');self.cli('run','--execute',code=1)
+        row=self.states()['A']
+        self.cli('repair','--ticket','A','--head',row['head_sha'],'--source','review','--execute',code=1)
+        self.cli('retry','--ticket','A',code=2)
+        ticket=json.loads((self.home/'A.json').read_text());ticket.update(id='B',supersedes=['A'])
+        replacement=self.home/'B.json';replacement.write_text(json.dumps(ticket))
+        self.cli('add','--ticket',str(replacement));self.cli('run','--execute',code=2)
+        self.assertEqual(self.states()['B']['attempts'],2)
+
+    def test_historical_hold_on_merged_predecessor_does_not_block_repair(self):
+        self.configure(risk=False);self.add('A');self.cli('run','--execute')
+        row=self.states()['A'];self.cli('hold','--ticket','A','--hold-version','0','--reason','Inspect')
+        self.git('merge','--ff-only',row['head_sha']);self.cli('run','--execute')
+        self.assertEqual(self.states()['A']['state'],'MERGED')
+        (self.repo/'A.py').write_text('value = 41\n');self.commit()
+        self.add('B',paths=['A.py'],title='REPAIR');self.cli('run','--execute',code=1)
+        row=self.states()['B']
+        self.cli('repair','--ticket','B','--head',row['head_sha'],'--source','review','--execute')
+        self.assertEqual(self.states()['B']['state'],'READY')
+
     def test_modified_review_artifact_cannot_feed_repair(self):
         self.configure(risk=False);self.add('A',title='REPAIR');self.cli('run','--execute',code=1)
         row=self.states()['A'];Path(row['review_json']['lenses']['spec']['artifact']['file']).write_text('{}')
         self.cli('repair','--ticket','A','--head',row['head_sha'],'--source','review','--execute',code=2)
         self.assertEqual(self.states()['A']['attempts'],1)
+
+    def test_repair_claim_and_attempt_transition_roll_back_together(self):
+        self.configure(risk=False);self.add('A',title='REPAIR');self.cli('run','--execute',code=1)
+        row=self.states()['A'];repo,home=factory.locations(self.repo);c=factory.config(repo)
+        args=argparse.Namespace(ticket='A',head=row['head_sha'],source='review',run_id=None,execute=True)
+        original=factory.record
+        def fail_transition(con,tid,state,details):
+            if state == 'RUNNING' and details.get('action') != 'repair':
+                raise RuntimeError('Simulated interruption before transaction commit')
+            return original(con,tid,state,details)
+        with factory.lock(home), contextlib.redirect_stdout(io.StringIO()), patch('factory.record',side_effect=fail_transition):
+            self.assertEqual(repair.repair_candidate(factory,repo,home,c,args),1)
+        with factory.connect(home) as con:
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM repair_requests').fetchone()[0],0)
+        self.assertEqual(self.states()['A']['attempts'],1)
+        self.cli('repair','--ticket','A','--head',row['head_sha'],'--source','review','--execute')
+        self.assertEqual(self.states()['A']['attempts'],2)
 
     def test_github_repair_invalidates_prior_human_approval(self):
         self.configure(github=True);self.add('A');self.cli('run','--execute')

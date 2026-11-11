@@ -218,6 +218,17 @@ COMPLEXITIES = ('routine', 'complex')
 MAX_ATTEMPTS = 3
 
 
+def attempt_limit(c):
+    """All retry/repair/replacement paths share the project's total attempt budget."""
+    return min(MAX_ATTEMPTS, (c.get('repair_policy') or {}).get('max_repairs', MAX_ATTEMPTS - 1) + 1)
+
+
+def reserved(row):
+    """Only active candidates and held pending/blocked tickets reserve paths."""
+    return (row['state'] in ('READY', 'AWAITING_HUMAN', 'RUNNING', 'REVIEWING') or
+            (row['state'] in ('PENDING', 'BLOCKED') and row.get('hold_reason') is not None))
+
+
 def builder_key(c, ticket):
     """Builder command for a ticket: by risk (role critical) and complexity, not only by layer.
 
@@ -404,9 +415,16 @@ def scoped(worktree, ticket, base):
     return paths
 
 
-def update(home, ticket_id, state, **kwargs):
+def update(home, ticket_id, state, repair_request=None, **kwargs):
     values = {'state': state, 'updated': time.time(), **kwargs}
     with connect(home) as con:
+        if repair_request is not None:
+            con.execute('''CREATE TABLE IF NOT EXISTS repair_requests (
+                ticket_id TEXT NOT NULL, head TEXT NOT NULL, receipt TEXT NOT NULL,
+                PRIMARY KEY(ticket_id,head))''')
+            con.execute('INSERT INTO repair_requests VALUES(?,?,?)',
+                        (ticket_id, repair_request['head'], repair_request['receipt']))
+            record(con, ticket_id, state, {'action': 'repair', **repair_request})
         con.execute('UPDATE tickets SET ' + ','.join(f'{k}=?' for k in values) + ' WHERE id=?', [*values.values(), ticket_id])
         record(con, ticket_id, state, kwargs)
 
@@ -618,7 +636,7 @@ def guard_verification_inputs(repo, ticket, base, head, c):
     refuse_links(repo, head)
 
 
-def execute_ticket(repo, home, c, ticket, base, repair=None):
+def execute_ticket(repo, home, c, ticket, base, repair=None, repair_request=None):
     tid = ticket['id']
     validate_handoff(repo, ticket, required=c.get('workflow') == 'egm')
     selected_checks = validate_policy(c, ticket)
@@ -632,9 +650,9 @@ def execute_ticket(repo, home, c, ticket, base, repair=None):
     logs.mkdir(parents=True)
     branch = 'infra-factory/' + tid + '-' + stamp
     try:
-        if previous['attempts'] >= MAX_ATTEMPTS:
-            raise FactoryError('Maximum of three attempts reached')
-        update(home, tid, 'RUNNING', branch=branch, worktree=str(work), base_sha=base,
+        if previous['attempts'] >= attempt_limit(c):
+            raise FactoryError('Maximum attempt budget reached: ' + str(attempt_limit(c)))
+        update(home, tid, 'RUNNING', repair_request=repair_request, branch=branch, worktree=str(work), base_sha=base,
                owner_pid=os.getpid(), owner_host=socket.gethostname(), error=None, config_hash=config_hash(c),
                attempts=previous['attempts'] + 1, head_sha=None, review_json=None, checks_json=None, pr_url=None)
         with GIT_LOCK:
@@ -796,8 +814,7 @@ def select_tickets(rows, limit, waiting=None):
     # An unmerged candidate still owns its paths: a second candidate from the same
     # base over the same files would be reviewed against code that is about to change.
     held = {r['id']: json.loads(r['ticket']).get('paths', []) for r in rows
-            if r['state'] in ('READY', 'AWAITING_HUMAN', 'RUNNING', 'REVIEWING') or
-            (r['state'] in ('PENDING', 'BLOCKED') and r.get('hold_reason') is not None)}
+            if reserved(r)}
     selected = []
     for row in rows:
         if row['state'] != 'PENDING':
@@ -1145,11 +1162,11 @@ def main(argv=None):
                 row = con.execute('SELECT * FROM tickets WHERE id=?', (args.ticket,)).fetchone()
                 if not row or row['state'] != 'BLOCKED':
                     raise FactoryError('Only BLOCKED tickets may be explicitly retried')
-                if row['attempts'] >= MAX_ATTEMPTS:
-                    raise FactoryError('Maximum of three attempts reached; inspect evidence. A replacement ticket must declare "supersedes" and inherits this history')
+                if row['attempts'] >= attempt_limit(c):
+                    raise FactoryError('Maximum attempt budget reached; a replacement inherits this history')
                 con.execute("UPDATE tickets SET state='PENDING',updated=? WHERE id=?", (time.time(), args.ticket))
                 record(con, args.ticket, 'PENDING', {'action': 'retry', 'attempts_used': row['attempts']})
-            print(json.dumps({'id': args.ticket, 'state': 'PENDING', 'attempts_used': row['attempts'], 'maximum_attempts': 3}))
+            print(json.dumps({'id': args.ticket, 'state': 'PENDING', 'attempts_used': row['attempts'], 'maximum_attempts': attempt_limit(c)}))
             return 0
         if args.action == 'publish':
             with connect(home) as con:
@@ -1176,7 +1193,7 @@ def main(argv=None):
                     if config_hash(json.loads(existing['ticket'])) != config_hash(t):
                         raise FactoryError('Idempotent replay conflicts with existing ticket content')
                     print(json.dumps({'id': t['id'], 'state': existing['state'], 'replayed': True,
-                                      'attempts_used': existing['attempts'], 'maximum_attempts': 3}))
+                                      'attempts_used': existing['attempts'], 'maximum_attempts': attempt_limit(c)}))
                     return 0
                 for dependency in t['depends_on']:
                     if not con.execute('SELECT id FROM tickets WHERE id=?', (dependency,)).fetchone():
@@ -1192,7 +1209,7 @@ def main(argv=None):
                                 ('Superseded by ' + t['id'] + '; history kept', time.time(), old))
                     record(con, old, 'REJECTED', {'action': 'superseded', 'by': t['id']})
             print(json.dumps({'id': t['id'], 'state': 'PENDING', 'replayed': False, 'attempts_used': inherited,
-                              'maximum_attempts': MAX_ATTEMPTS}))
+                              'maximum_attempts': attempt_limit(c)}))
             return 0
         if not 1 <= args.limit <= 2:
             raise FactoryError('limit must be 1 or 2')
@@ -1232,6 +1249,9 @@ def main(argv=None):
         if not isinstance(c.get('checks'), list) or not c['checks']:
             raise FactoryError('Configure at least one check argv; missing checks are never green')
         for ticket in selected:
+            attempts = next(r['attempts'] for r in rows if r['id'] == ticket['id'])
+            if attempts >= attempt_limit(c):
+                raise FactoryError('Maximum attempt budget reached for ' + ticket['id'])
             validate_handoff(repo, ticket, required=c.get('workflow') == 'egm')
             validate_policy(c, ticket)
         for check in c['checks']:
