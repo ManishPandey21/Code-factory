@@ -1,12 +1,14 @@
 import json
 from pathlib import Path
 import sqlite3
+import sys
 import tempfile
 import threading
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import factory
 from ledger_view import snapshot, server
 

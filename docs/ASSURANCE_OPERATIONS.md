@@ -138,3 +138,17 @@ under the local operator account; it is not a remotely authenticated dashboard.
 States are recorded history, not a live certificate of filesystem/remote CI
 validity. `status` and `publish` perform the current evidence checks. Ctrl-C stops
 the viewer.
+
+## Verification commands
+
+Run `python -m unittest discover -s tests -v` from the toolkit root for the
+stdlib integration suite. An optional real-browser check is available when
+Playwright and Chromium are installed:
+
+```bash
+python tests/browser_smoke.py --browser /usr/bin/chromium --artifacts /tmp/factory-browser
+```
+
+It uses a temporary fixture ledger and loopback server, checks safe text,
+filtering, live hold/event updates, reconnect behavior and mobile layout, and
+optionally saves screenshots. It does not invoke providers or GitHub.
