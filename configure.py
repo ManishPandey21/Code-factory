@@ -8,6 +8,8 @@ tickets may escalate either reviewer lens. Override any role with ``--route ROLE
 """
 import argparse
 import json
+import re
+import review_policy
 from pathlib import Path
 import sys
 
@@ -26,7 +28,7 @@ def parse_route(text):
         provider, model, effort = rest.split(':')
     except ValueError:
         raise argparse.ArgumentTypeError('--route takes ROLE=PROVIDER:MODEL:EFFORT') from None
-    if role not in ROLES:
+    if role not in ROLES and role != 'risk_assessor' and not re.fullmatch(r'reviewer_[a-z][a-z0-9_]{0,31}', role):
         raise argparse.ArgumentTypeError(f'unknown role {role!r} (one of {", ".join(ROLES)})')
     if provider not in ('claude', 'codex'):
         raise argparse.ArgumentTypeError('provider must be claude or codex')
@@ -56,6 +58,7 @@ def main(argv=None):
     p.add_argument('--provider', choices=['claude', 'codex'], help='default provider for all roles')
     p.add_argument('--model', help='explicit model ID available in your account')
     p.add_argument('--effort', choices=EFFORTS, default='medium')
+    p.add_argument('--review-policy', type=Path, help='project specialist and independent risk policy JSON')
     p.add_argument('--egm', action='store_true', help='require approved EGM handoffs for every ticket')
     p.add_argument('--route', action='append', type=parse_route, default=[],
                    help='override one role, e.g. builder_routine=codex:gpt-6.1-sol:medium (repeatable)')
@@ -82,21 +85,29 @@ def main(argv=None):
     bridge = Path(__file__).with_name('agent_bridge.py').resolve()
     if bool(a.provider) != bool(a.model):
         p.error('--provider and --model must be supplied together')
+    if a.review_policy:
+        try:
+            c['review_policy'] = review_policy.validate(json.loads(a.review_policy.read_text()))
+        except (OSError, ValueError, TypeError) as exc:
+            p.error(str(exc))
+    roles = ROLES + tuple(review_policy.required_commands(c.get('review_policy', {})))
     routes = {}
     if a.provider:
-        for role in ROLES:
+        for role in roles:
             try:
                 _, route = parse_route(f'{role}={a.provider}:{a.model}:{a.effort}')
             except argparse.ArgumentTypeError as exc:
                 p.error(str(exc))
             routes[role] = route
     routes.update(dict(a.route))
-    missing = set(ROLES) - set(routes)
+    if set(routes) - set(roles):
+        p.error('Route is not selected by review policy: ' + ', '.join(sorted(set(routes) - set(roles))))
+    missing = set(roles) - set(routes)
     if missing:
         p.error('Choose explicit --provider/--model or --route for every role; missing: ' + ', '.join(sorted(missing)))
     if a.egm:
         c['workflow'] = 'egm'
-    commands = {role: mapping(bridge, skill, role, *routes[role]) for role in ROLES}
+    commands = {role: mapping(bridge, skill, role, *routes[role]) for role in roles}
     for role, spec in commands.items():
         if role.startswith('builder') and helpers:
             spec['support_skills'] = dict(helpers)

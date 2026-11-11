@@ -24,8 +24,8 @@ def change_control(con, ticket_id, expected_version, reason, release=False):
     if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
         raise ValueError('A nonempty reason of at most 1000 characters is required')
     row = con.execute('SELECT state FROM tickets WHERE id=?', (ticket_id,)).fetchone()
-    if not row or row[0] not in ('PENDING', 'BLOCKED', 'READY'):
-        raise ValueError('Holds can change only on inactive PENDING, BLOCKED or READY tickets; recover stopped work first')
+    if not row or row[0] not in ('PENDING', 'BLOCKED', 'READY', 'AWAITING_HUMAN'):
+        raise ValueError('Holds can change only on inactive PENDING, BLOCKED, READY or AWAITING_HUMAN tickets; recover stopped work first')
     current = control(con, ticket_id)
     if current['hold_version'] != expected_version:
         raise ValueError('Hold version changed; read current status before changing the hold')

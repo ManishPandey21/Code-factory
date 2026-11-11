@@ -1,5 +1,15 @@
 # 0.4.2 — durable ticket controls and skill navigation
 
+## 0.5.0 — Candidate assurance and live operations
+
+- Select specialist lenses from actual changed paths and project policy; retain mandatory standards/spec reviews.
+- Add independent risk assessment with policy floors and exact-candidate human attestations.
+- Repair from pinned raw review evidence or allowlisted GitHub Actions runs, bounded by the existing attempt history.
+- Add read-only ledger event cursors and a loopback dashboard with live polling, filters and hold/risk visibility.
+- Configure specialist/risk routes for either Claude or Codex through the existing fresh-profile bridge.
+- Revalidate raw review/risk/routing artifacts at publication; preserve legacy configurations.
+
+
 - Add a table of contents matching all eight headings in the shared skill.
 - Adapt Machinist's durable private holds with version-checked hold/release,
   transactional audit events and dispatch/retry/publication/supersession guards.

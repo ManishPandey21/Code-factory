@@ -1,0 +1,14 @@
+{
+  "specialists": {
+    "security": {"paths": ["auth/**", "**/auth/**", "**/*security*", "api/**"], "focus": "Authentication, authorization, untrusted inputs, secret handling and abuse cases."},
+    "data": {"paths": ["migrations/**", "**/migrations/**", "data/**"], "focus": "Data integrity, compatibility, rollback and migration failure modes."},
+    "frontend": {"paths": ["web/**", "frontend/**", "**/*.tsx"], "focus": "User flows, accessibility, loading/error states and responsive behavior."}
+  },
+  "risk": {
+    "minimum_level": "low",
+    "human_review_levels": ["high", "critical"],
+    "path_levels": [
+      {"paths": ["auth/**", "**/auth/**", "migrations/**", "**/migrations/**"], "level": "high"}
+    ]
+  }
+}

@@ -1,4 +1,9 @@
-# Infra Code Factory 0.4.2 — EGM integration candidate
+# Infra Code Factory 0.5.0 — EGM integration candidate
+
+0.5.0 adds diff-selected specialist reviews, independent risk and human-review gates,
+bounded repairs from pinned review/CI findings, and a live read-only ledger dashboard.
+See [assurance and operations](docs/ASSURANCE_OPERATIONS.md) for configuration and commands.
+
 
 0.4.2 adds durable versioned ticket holds, duplicate-safe intake, and a heading-matched
 skill table of contents. See [ticket controls](docs/TICKET_CONTROLS.md) and
@@ -12,9 +17,9 @@ explicit provider/model configuration, and stronger route evidence validation.
 Start with [EGM_WORKFLOW.md](docs/EGM_WORKFLOW.md) and [the current audit](docs/AUDIT_V040.md).
 The original classic workflow remains available. See [CHANGELOG.md](CHANGELOG.md).
 
-A desktop-led, local coding toolkit for Claude Code and Codex: one coordinator, two independent tickets, builder worktrees, independent cold repositories, executable checks, two fresh review lenses and guarded draft-PR publication. No automatic merge or deployment.
+A desktop-led, local coding toolkit for Claude Code and Codex: one coordinator, two independent tickets, builder worktrees, independent cold repositories, executable checks, mandatory standards/spec plus policy-selected specialist reviews and guarded draft-PR publication. No automatic merge or deployment.
 
-This is standalone Python source, not a globally installed skill. Download and extract the package into a stable tools directory outside your application repository. No pip dependencies. Python 3.10+, Git and authenticated local coding CLIs are needed. GitHub CLI (`gh`) and authenticated Git push are needed only for publishing.
+This is standalone Python source, not a globally installed skill. Download and extract the package into a stable tools directory outside your application repository. No pip dependencies. Python 3.10+, Git and authenticated local coding CLIs are needed. GitHub CLI (`gh`) and authenticated Git push are needed for publishing; `gh` is also needed for GitHub CI repair.
 
 **Validation boundary:** the included integration suite runs real Git worktrees with deterministic fake CLI workers/reviewers. This validates orchestration, transport and rejection cases. It does not prove real model quality or your local authentication. A real Claude/Codex pilot remains an onboarding step. Linux was tested; Windows/macOS were not exercised here.
 
@@ -73,7 +78,7 @@ python /path/to/infra-code-factory/factory.py run --repo /path/to/project --exec
 python /path/to/infra-code-factory/factory.py status --repo /path/to/project
 ```
 
-The preview shows which tickets can run and, under `waiting`, why each other ticket cannot. Two independent tickets run together; unmerged dependencies wait, and so does any ticket whose paths overlap another ticket in the batch or a READY candidate that has not been merged or rejected. The coordinator must also judge semantic dependencies not detectable from paths.
+The preview shows which tickets can run and, under `waiting`, why each other ticket cannot. Two independent tickets run together; unmerged dependencies wait, and so does any ticket whose paths overlap another ticket in the batch or a READY or AWAITING_HUMAN candidate that has not been merged or rejected. The coordinator must also judge semantic dependencies not detectable from paths.
 
 10. For each READY ticket, inspect the recorded checks, both reviews and diff. Preview publication, then explicitly publish a draft:
 

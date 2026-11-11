@@ -40,6 +40,20 @@ class PortableConfigurationTests(unittest.TestCase):
                                     for c in config['commands'].values()))
                 self.assertEqual(self.path.read_text(), self.original)
 
+    def test_policy_roles_use_fresh_reviewer_bridge_for_both_providers(self):
+        for provider, model in [('claude', 'claude-test-1'), ('codex', 'test-model-1')]:
+            p = self.configure('--provider', provider, '--model', model,
+                               '--review-policy', str(ROOT / 'examples/review-policy.json'),
+                               '--route', 'risk_assessor=codex:test-risk-model:high')
+            self.assertEqual(p.returncode, 0, p.stderr)
+            c = json.loads(p.stdout)
+            for role in ('reviewer_security', 'reviewer_data', 'reviewer_frontend', 'risk_assessor'):
+                self.assertIn('reviewer', c['commands'][role]['argv'])
+                self.assertIn('--strict-routing', c['commands'][role]['argv'])
+                self.assertNotIn('primary_skill', c['commands'][role])
+            self.assertEqual(c['commands']['risk_assessor']['model'], 'test-risk-model')
+            self.assertEqual(c['commands']['reviewer_security']['provider'], provider)
+
     def test_no_implicit_model_ids(self):
         p = self.configure()
         self.assertNotEqual(p.returncode, 0)
