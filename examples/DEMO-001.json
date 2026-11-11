@@ -1,0 +1,36 @@
+{
+  "id": "DEMO-001",
+  "title": "Add a greeting function with behavior tests",
+  "description": "Implement greeting(name) in greeting.py. Strip surrounding whitespace, return Hello, <name>!, and reject blank names with ValueError. Add focused unittest tests in test_greeting.py. Do not edit any other files.",
+  "acceptance": [
+    "greeting(' Manish ') returns 'Hello, Manish!'",
+    "A blank name raises ValueError",
+    "Tests fail for the intended behavior before implementation and pass afterward"
+  ],
+  "paths": [
+    "greeting.py",
+    "test_greeting.py"
+  ],
+  "depends_on": [],
+  "role": "backend",
+  "spec": {
+    "ui": {
+      "not_applicable": "This example adds no UI."
+    },
+    "api": {
+      "impact": "Public Python function interface described above",
+      "acceptance": [
+        "greeting(' Manish ') returns 'Hello, Manish!'"
+      ]
+    },
+    "data": {
+      "not_applicable": "No persisted data or schema changes."
+    },
+    "cross_cutting": {
+      "impact": "Input validation and reproducible regression tests",
+      "acceptance": [
+        "No network or external side effects"
+      ]
+    }
+  }
+}

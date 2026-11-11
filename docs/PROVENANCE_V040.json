@@ -1,0 +1,8 @@
+{
+  "input_archive": "infra-code-factory-v0.3.4.zip",
+  "input_sha256": "6fb75719611053c151e5a189e69e0b3a2cf396ec82938f507a48a83d9d6815e6",
+  "egm_reference_repository": "https://github.com/google/elephant-goldfish-model",
+  "egm_reference_commit": "0f06dd7230261c00f0e03bd8d3ca8b5a1b898e2b",
+  "output_version": "0.4.0",
+  "date": "2026-11-11"
+}

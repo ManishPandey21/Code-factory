@@ -1,0 +1,185 @@
+{
+  "path_domains": {
+    "frontend": [
+      "frontend"
+    ],
+    "backend": [
+      "backend"
+    ],
+    "shared": [
+      "shared",
+      "contracts"
+    ]
+  },
+  "required": {},
+  "checks": [
+    {
+      "id": "frontend-unit",
+      "domains": [
+        "frontend"
+      ],
+      "kind": "unit",
+      "argv": [
+        "python",
+        "/ABS/infra-code-factory/test_report.py",
+        "--report",
+        "{report}",
+        "--junit",
+        ".factory-test-output/frontend-unit.xml",
+        "--",
+        "/ABS/trusted-project-ci/run-suite",
+        "frontend-unit",
+        ".factory-test-output/frontend-unit.xml"
+      ],
+      "report": "frontend-unit.json",
+      "min_tests": 1
+    },
+    {
+      "id": "frontend-component",
+      "domains": [
+        "frontend"
+      ],
+      "kind": "component",
+      "argv": [
+        "python",
+        "/ABS/infra-code-factory/test_report.py",
+        "--report",
+        "{report}",
+        "--junit",
+        ".factory-test-output/frontend-component.xml",
+        "--",
+        "/ABS/trusted-project-ci/run-suite",
+        "frontend-component",
+        ".factory-test-output/frontend-component.xml"
+      ],
+      "report": "frontend-component.json",
+      "min_tests": 1
+    },
+    {
+      "id": "frontend-visual",
+      "domains": [
+        "frontend"
+      ],
+      "kind": "visual",
+      "argv": [
+        "python",
+        "/ABS/infra-code-factory/test_report.py",
+        "--report",
+        "{report}",
+        "--junit",
+        ".factory-test-output/frontend-visual.xml",
+        "--",
+        "/ABS/trusted-project-ci/run-suite",
+        "frontend-visual",
+        ".factory-test-output/frontend-visual.xml"
+      ],
+      "report": "frontend-visual.json",
+      "min_tests": 1
+    },
+    {
+      "id": "frontend-e2e",
+      "domains": [
+        "frontend"
+      ],
+      "kind": "e2e",
+      "argv": [
+        "python",
+        "/ABS/infra-code-factory/test_report.py",
+        "--report",
+        "{report}",
+        "--junit",
+        ".factory-test-output/frontend-e2e.xml",
+        "--",
+        "/ABS/trusted-project-ci/run-suite",
+        "frontend-e2e",
+        ".factory-test-output/frontend-e2e.xml"
+      ],
+      "report": "frontend-e2e.json",
+      "min_tests": 1
+    },
+    {
+      "id": "backend-unit",
+      "domains": [
+        "backend"
+      ],
+      "kind": "unit",
+      "argv": [
+        "python",
+        "/ABS/infra-code-factory/test_report.py",
+        "--report",
+        "{report}",
+        "--junit",
+        ".factory-test-output/backend-unit.xml",
+        "--",
+        "/ABS/trusted-project-ci/run-suite",
+        "backend-unit",
+        ".factory-test-output/backend-unit.xml"
+      ],
+      "report": "backend-unit.json",
+      "min_tests": 1
+    },
+    {
+      "id": "backend-api",
+      "domains": [
+        "backend"
+      ],
+      "kind": "api",
+      "argv": [
+        "python",
+        "/ABS/infra-code-factory/test_report.py",
+        "--report",
+        "{report}",
+        "--junit",
+        ".factory-test-output/backend-api.xml",
+        "--",
+        "/ABS/trusted-project-ci/run-suite",
+        "backend-api",
+        ".factory-test-output/backend-api.xml"
+      ],
+      "report": "backend-api.json",
+      "min_tests": 1
+    },
+    {
+      "id": "backend-integration",
+      "domains": [
+        "backend"
+      ],
+      "kind": "integration",
+      "argv": [
+        "python",
+        "/ABS/infra-code-factory/test_report.py",
+        "--report",
+        "{report}",
+        "--junit",
+        ".factory-test-output/backend-integration.xml",
+        "--",
+        "/ABS/trusted-project-ci/run-suite",
+        "backend-integration",
+        ".factory-test-output/backend-integration.xml"
+      ],
+      "report": "backend-integration.json",
+      "min_tests": 1
+    },
+    {
+      "id": "shared-contract",
+      "domains": [
+        "shared"
+      ],
+      "kind": "contract",
+      "argv": [
+        "python",
+        "/ABS/infra-code-factory/test_report.py",
+        "--report",
+        "{report}",
+        "--junit",
+        ".factory-test-output/shared-contract.xml",
+        "--",
+        "/ABS/trusted-project-ci/run-suite",
+        "shared-contract",
+        ".factory-test-output/shared-contract.xml"
+      ],
+      "report": "shared-contract.json",
+      "min_tests": 1
+    }
+  ]
+}

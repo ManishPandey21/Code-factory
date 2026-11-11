@@ -1,0 +1,37 @@
+{
+  "id": "DEMO-002",
+  "title": "Add an integer subtotal function with behavior tests",
+  "description": "Implement subtotal(values) in subtotal.py for a list of nonnegative integer quantities. Return their sum; empty input returns zero; negative input raises ValueError. Add unittest tests in test_subtotal.py. Do not edit any other files.",
+  "acceptance": [
+    "subtotal([2, 3, 0]) returns 5",
+    "Empty input returns zero",
+    "Negative quantities raise ValueError",
+    "Tests fail for the intended behavior before implementation and pass afterward"
+  ],
+  "paths": [
+    "subtotal.py",
+    "test_subtotal.py"
+  ],
+  "depends_on": [],
+  "role": "backend",
+  "spec": {
+    "ui": {
+      "not_applicable": "This example adds no UI."
+    },
+    "api": {
+      "impact": "Public Python function interface described above",
+      "acceptance": [
+        "subtotal([2, 3, 0]) returns 5"
+      ]
+    },
+    "data": {
+      "not_applicable": "No persisted data or schema changes."
+    },
+    "cross_cutting": {
+      "impact": "Input validation and reproducible regression tests",
+      "acceptance": [
+        "No network or external side effects"
+      ]
+    }
+  }
+}
