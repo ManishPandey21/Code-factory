@@ -130,8 +130,8 @@ class PathSafetyTests(unittest.TestCase):
         from verification_policy import validate_evidence
         from test_report import parse_junit
         real=self.root/'real';real.mkdir();alias=self.root/'var';alias.symlink_to(real,target_is_directory=True)
-        (real/'report.json').write_text(json.dumps({'status':'passed','total':1,'passed':1,'failed':0,'skipped':0}),encoding='utf-8')
-        (real/'native.xml').write_text('<testsuite><testcase/></testsuite>',encoding='utf-8')
+        (real/'report.json').write_text(json.dumps({'status':'passed','total':1,'passed':1,'failed':0,'skipped':0,'tests':[{'id':'test','status':'passed'}]}),encoding='utf-8')
+        (real/'native.xml').write_text('<testsuite><testcase name="test"/></testsuite>',encoding='utf-8')
         (real/'nested').symlink_to(real,target_is_directory=True)
         with patch('path_safety.tempfile.gettempdir',return_value=str(alias)):
             self.assertEqual(validate_evidence(alias/'report.json',{'min_tests':1})['total'],1)
@@ -146,7 +146,7 @@ class PathSafetyTests(unittest.TestCase):
         from unittest.mock import patch
         from verification_policy import validate_evidence
         report=self.root/'report.json'
-        report.write_text(json.dumps({'status':'passed','total':1,'passed':1,'failed':0,'skipped':0}),encoding='utf-8')
+        report.write_text(json.dumps({'status':'passed','total':1,'passed':1,'failed':0,'skipped':0,'tests':[{'id':'test','status':'passed'}]}),encoding='utf-8')
         original=Path.resolve
         def resolve(path,*args,**kwargs):
             return self.root if path == Path('/tmp') else original(path,*args,**kwargs)

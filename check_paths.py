@@ -4,7 +4,39 @@ This does not interpret shell/code strings or follow wrapper imports. Those stil
 need explicit protected_paths or an externally controlled verification service.
 """
 import os
+import re
 from pathlib import Path
+
+
+def mutation_inputs(argv):
+    """Protect the mutator executable/script, not its production destinations.
+
+    Recognize Python's script position and plain script invocations for common
+    interpreters. Inline code, modules, wrapper imports and unusual launcher
+    flags still require explicit protected_paths, as with normal checks.
+    """
+    inputs = argv[:1]
+    if not argv:
+        return inputs
+    launcher = Path(argv[0]).name.lower().removesuffix('.exe')
+    if re.fullmatch(r'(?:python|pypy)(?:[0-9]+(?:\.[0-9]+)*)?', launcher):
+        index = 1
+        while index < len(argv):
+            argument = argv[index]
+            if argument in ('-c', '-m') or argument.startswith(('-c', '-m')):
+                return inputs
+            if argument in ('-W', '-X'):
+                index += 2
+                continue
+            if argument == '--':
+                return inputs + argv[index + 1:index + 2]
+            if not argument.startswith('-'):
+                return inputs + [argument]
+            index += 1
+    elif launcher in ('node', 'nodejs', 'ruby', 'perl', 'sh', 'bash', 'dash', 'zsh', 'pwsh', 'powershell'):
+        if len(argv) > 1 and not argv[1].startswith('-'):
+            inputs.append(argv[1])
+    return inputs
 
 
 def referenced_paths(config, repo, tracked_paths, source_repo=None):
@@ -16,6 +48,9 @@ def referenced_paths(config, repo, tracked_paths, source_repo=None):
     protected = set()
     commands = list(config.get('checks', []))
     commands += [check['argv'] for check in config.get('verification', {}).get('checks', [])]
+    commands += [mutation_inputs(check['negative_control']['argv'])
+                 for check in config.get('verification', {}).get('checks', [])
+                 if 'negative_control' in check]
     for argv in commands:
         for arg in argv:
             # Flags with an attached value and pytest node selectors still name paths.

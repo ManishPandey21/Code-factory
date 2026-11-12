@@ -1,4 +1,5 @@
 """Real CLI regressions for durable holds and duplicate-safe submission."""
+import contextlib
 import json
 from pathlib import Path
 import sqlite3
@@ -23,7 +24,7 @@ class TicketControlTests(unittest.TestCase):
                         '--reason', 'Destination reviewed', code=code)
 
     def event_count(self, tid='A'):
-        with sqlite3.connect(self.repo / '.git/infra-factory/ledger.sqlite3') as con:
+        with contextlib.closing(sqlite3.connect(self.repo / '.git/infra-factory/ledger.sqlite3')) as con, con:
             return con.execute('SELECT COUNT(*) FROM events WHERE ticket_id=?', (tid,)).fetchone()[0]
 
     def test_hold_survives_commands_and_stale_release_is_refused(self):
@@ -75,7 +76,7 @@ class TicketControlTests(unittest.TestCase):
         self.hold(version=-1, code=2)
         self.hold(reason='  ', code=2)
         self.release(version=0, code=2)
-        with sqlite3.connect(self.repo / '.git/infra-factory/ledger.sqlite3') as con:
+        with contextlib.closing(sqlite3.connect(self.repo / '.git/infra-factory/ledger.sqlite3')) as con, con:
             con.execute("UPDATE tickets SET state='RUNNING' WHERE id='A'")
         self.hold(code=2)
 
@@ -121,7 +122,7 @@ class TicketControlTests(unittest.TestCase):
 
     def test_idempotent_add_preserves_state_attempts_events_and_holds(self):
         self.add('A'); self.hold()
-        with sqlite3.connect(self.repo / '.git/infra-factory/ledger.sqlite3') as con:
+        with contextlib.closing(sqlite3.connect(self.repo / '.git/infra-factory/ledger.sqlite3')) as con, con:
             con.execute("UPDATE tickets SET attempts=2,state='BLOCKED' WHERE id='A'")
         before = self.event_count()
         p = self.cli('add', '--ticket', str(self.home / 'A.json'), '--idempotent')
@@ -152,3 +153,27 @@ del FactoryTests
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ControlAtomicityTests(unittest.TestCase):
+    def test_event_failure_rolls_back_hold_and_release_versions(self):
+        import contextlib
+        import io
+        import sys
+        from unittest.mock import patch
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        import factory
+        from test_factory import FactoryTests as Fixture
+        fixture = Fixture(); fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        fixture.add('A')
+        for action, version in [('hold', 0), ('release', 1)]:
+            if action == 'release':
+                fixture.cli('hold', '--ticket', 'A', '--hold-version', '0', '--reason', 'Keep')
+            with contextlib.redirect_stdout(io.StringIO()), patch('factory.record', side_effect=RuntimeError('audit failed')):
+                with self.assertRaises(RuntimeError):
+                    factory.main([action, '--repo', str(fixture.repo), '--ticket', 'A',
+                                  '--hold-version', str(version), '--reason', 'Change'])
+            row = fixture.states()['A']
+            self.assertEqual(row['hold_version'], version)
+            self.assertEqual(row['hold_reason'], None if version == 0 else 'Keep')

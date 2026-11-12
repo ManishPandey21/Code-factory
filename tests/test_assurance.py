@@ -139,7 +139,7 @@ class AssuranceTests(unittest.TestCase):
             if state == 'RUNNING' and details.get('action') != 'repair':
                 raise RuntimeError('Simulated interruption before transaction commit')
             return original(con,tid,state,details)
-        with factory.lock(home), contextlib.redirect_stdout(io.StringIO()), patch('factory.record',side_effect=fail_transition):
+        with factory.lock(home), contextlib.redirect_stdout(io.StringIO()), patch('records.record',side_effect=fail_transition):
             self.assertEqual(repair.repair_candidate(factory,repo,home,c,args),1)
         with factory.connect(home) as con:
             self.assertEqual(con.execute('SELECT COUNT(*) FROM repair_requests').fetchone()[0],0)

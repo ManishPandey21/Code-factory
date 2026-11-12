@@ -33,18 +33,20 @@ class NativeReportTests(unittest.TestCase):
     def test_actual_native_testcase_counts_written(self):
         self.cli(self.writer('<testsuites><testsuite tests="2"><testcase name="one"/><testcase name="two"/></testsuite></testsuites>'))
         self.assertEqual(json.loads(self.report.read_text(encoding='utf-8')),
-                         {'status': 'passed', 'total': 2, 'passed': 2, 'failed': 0, 'skipped': 0})
+                         {'status': 'passed', 'total': 2, 'passed': 2, 'failed': 0, 'skipped': 0,
+                          'tests': [{'id': '["","","one"]', 'status': 'passed'},
+                                    {'id': '["","","two"]', 'status': 'passed'}]})
 
     def test_nonzero_exit_rejects_even_green_native_report(self):
-        self.cli(self.writer('<testsuite><testcase/></testsuite>', 1), expected=2)
+        self.cli(self.writer('<testsuite><testcase name="test"/></testsuite>', 1), expected=2)
         self.assertFalse(self.report.exists())
 
     def test_no_tests_missing_failed_skipped_and_suite_error(self):
         cases = [None, '<testsuite/>', '<testsuite><testcase><failure/></testcase></testsuite>',
                  '<testsuite><testcase><skipped/></testcase></testsuite>',
-                 '<testsuite><testcase/><error/></testsuite>',
-                 '<testsuite failures="1"><testcase/></testsuite>',
-                 '<testsuite tests="99"><testcase/></testsuite>',
+                 '<testsuite><testcase name="test"/><error/></testsuite>',
+                 '<testsuite failures="1"><testcase name="test"/></testsuite>',
+                 '<testsuite tests="99"><testcase name="test"/></testsuite>',
                  '<testsuite><testcase status="notrun"/></testsuite>',
                  '<testsuite><testcase result="suppressed"/></testsuite>']
         for xml in cases:
@@ -54,13 +56,13 @@ class NativeReportTests(unittest.TestCase):
                 self.assertFalse(self.report.exists())
 
     def test_preexisting_native_never_reused(self):
-        self.native.write_text('<testsuite><testcase/></testsuite>', encoding='utf-8')
+        self.native.write_text('<testsuite><testcase name="test"/></testsuite>', encoding='utf-8')
         self.cli('raise SystemExit("command should not run")', expected=2)
         self.assertFalse(self.report.exists())
 
     def test_preexisting_normalized_is_not_overwritten(self):
         self.report.write_text('original', encoding='utf-8')
-        self.cli(self.writer('<testsuite><testcase/></testsuite>'), expected=2)
+        self.cli(self.writer('<testsuite><testcase name="test"/></testsuite>'), expected=2)
         self.assertEqual(self.report.read_text(encoding='utf-8'), 'original')
         self.assertFalse(self.native.exists())
 
@@ -83,14 +85,14 @@ class NativeReportTests(unittest.TestCase):
         self.cli('pass', expected=2, junit='link/report.xml')
 
     def test_test_process_cannot_replace_normalized_report(self):
-        code = self.writer('<testsuite><testcase/></testsuite>').split('; raise SystemExit')[0]
+        code = self.writer('<testsuite><testcase name="test"/></testsuite>').split('; raise SystemExit')[0]
         code += '; Path("normalized.json").write_text("untrusted")'
         self.cli(code, expected=2)
         self.assertEqual(self.report.read_text(encoding='utf-8'), 'untrusted')
 
     def test_unsafe_and_oversized_xml_rejected(self):
-        for raw in [b'<!DOCTYPE x [<!ENTITY x "entity">]><testsuite><testcase/></testsuite>',
-                    '<!DOCTYPE x><testsuite><testcase/></testsuite>'.encode('utf-16'),
+        for raw in [b'<!DOCTYPE x [<!ENTITY x "entity">]><testsuite><testcase name="test"/></testsuite>',
+                    '<!DOCTYPE x><testsuite><testcase name="test"/></testsuite>'.encode('utf-16'),
                     b'x' * (16 * 1024 * 1024 + 1), b'<broken>']:
             self.native.write_bytes(raw)
             with self.assertRaises(ReportError): parse_junit(self.native)

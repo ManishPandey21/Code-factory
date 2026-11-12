@@ -9,10 +9,12 @@ Example invocations (run from a fresh verifier checkout):
   PLAYWRIGHT_JUNIT_OUTPUT_FILE=e2e.xml python /trusted/test_report.py \
     --report /tmp/run/e2e.json --junit e2e.xml -- npx playwright test --reporter=junit
 
-Configure a separate command for each required suite. This adapter counts actual
-testcase elements; it does not infer test categories, coverage, assertions, or
+Configure a separate command for each required suite. This adapter retains named
+testcase outcomes; it does not infer test categories, coverage, assertions, or
 visual quality from filenames or aggregate counts. Test commands/runners must be
-trusted. Neither a successful exit code nor hand-supplied counts are evidence.
+trusted. --mode fail accepts only a nonzero native exit with named assertion
+failures (no errors/skips); the controller compares them with the passing inventory.
+Neither a successful exit code nor hand-supplied counts are evidence.
 """
 from __future__ import annotations
 
@@ -20,6 +22,7 @@ import argparse
 import json
 import math
 import os
+import re
 from pathlib import Path, PurePosixPath
 import signal
 import subprocess
@@ -51,7 +54,7 @@ def native_path(value):
     return no_symlinks(Path.cwd() / path, root=Path.cwd())
 
 
-def parse_junit(path):
+def parse_junit(path, expect_failure=False):
     path = no_symlinks(path)
     if not path.is_file() or path.stat().st_size > MAX_XML_BYTES:
         raise ReportError('Native JUnit report missing, non-regular or oversized')
@@ -78,7 +81,25 @@ def parse_junit(path):
     if any(node.get('status', '').lower() in {'notrun', 'disabled', 'skipped', 'failed', 'error'} or
            node.get('result', '').lower() in {'suppressed', 'skipped', 'failed', 'error'} for node in cases):
         raise ReportError('JUnit contains non-executed or non-passing testcase attributes')
-    if not total or failed or skipped or all_errors or all_skipped:
+    errors = any(local(node.tag) == 'error' for node in root.iter())
+    if expect_failure:
+        assertion_types = {'AssertionError', 'builtins.AssertionError', 'java.lang.AssertionError',
+                           'junit.framework.AssertionFailedError', 'org.opentest4j.AssertionFailedError'}
+        failures = [node for node in root.iter() if local(node.tag) == 'failure']
+        case_failures = [child for case in cases for child in case.iter() if local(child.tag) == 'failure']
+        if len(failures) != len(case_failures):
+            raise ReportError('Suite-level failures are not assertion evidence')
+        for failure in failures:
+            kind = failure.get('type', '')
+            message = failure.get('message', '')
+            # Pytest omits type for assertions, but prefixes its native message
+            # with the assertion expression or AssertionError. Unknown runner
+            # formats require a trusted adapter; never treat a crash as a kill.
+            pytest_assertion = not kind and re.match(r'^(?:assert\s|AssertionError(?:[:\s]|$))', message)
+            if kind not in assertion_types and not pytest_assertion:
+                raise ReportError('Negative control requires a recognized assertion failure')
+    if (not total or skipped or all_skipped or errors or
+            (not expect_failure and (failed or all_errors)) or (expect_failure and not failed)):
         raise ReportError(f'JUnit suite is not fully passing: total={total}, failed={failed}, skipped={skipped}')
     # Explicit aggregate failure/skip counts must not contradict testcase data.
     for node in root.iter():
@@ -98,12 +119,34 @@ def parse_junit(path):
                     count = int(node.attrib[key])
                 except ValueError as exc:
                     raise ReportError(f'Invalid JUnit {key} count') from exc
-                if count != 0:
+                actual_failures = sum(any(local(c.tag) == 'failure' for c in case.iter())
+                                      for case in node.iter() if local(case.tag) == 'testcase')
+                if count != (actual_failures if expect_failure and key == 'failures' else 0):
                     raise ReportError(f'JUnit aggregate {key} is nonzero')
-    return {'status': 'passed', 'total': total, 'passed': total, 'failed': 0, 'skipped': 0}
+    tests, seen = [], set()
+    def collect(node, suites=()):
+        tag = local(node.tag)
+        if tag == 'testsuite':
+            suites = (*suites, node.get('name', ''))
+        if tag == 'testcase':
+            name = node.get('name', '')
+            if not name.strip():
+                raise ReportError('Every testcase needs a nonempty name')
+            identity = json.dumps([*suites, node.get('classname', ''), name],
+                                  ensure_ascii=True, separators=(',', ':'))
+            if identity in seen:
+                raise ReportError('Duplicate testcase identity: ' + identity)
+            seen.add(identity)
+            status = 'failed' if any(local(c.tag) == 'failure' for c in node.iter()) else 'passed'
+            tests.append({'id': identity, 'status': status})
+        for child in node:
+            collect(child, suites)
+    collect(root)
+    return {'status': 'failed' if failed else 'passed', 'total': total,
+            'passed': total - failed, 'failed': failed, 'skipped': 0, 'tests': tests}
 
 
-def run(report, junit, command, timeout=300):
+def run(report, junit, command, timeout=300, expect_failure=False):
     report = Path(report)
     if not report.is_absolute() or '..' in report.parts:
         raise ReportError('--report must be an absolute path without traversal')
@@ -133,9 +176,9 @@ def run(report, junit, command, timeout=300):
             proc.kill()  # Windows descendant isolation requires an external Job Object runner.
         proc.wait()
         raise
-    if code:
-        raise ReportError(f'Test command exited {code}')
-    evidence = parse_junit(junit)
+    if (expect_failure and code <= 0) or (not expect_failure and code != 0):
+        raise ReportError(f'Test command exited {code}; expected ' + ('a test failure' if expect_failure else 'success'))
+    evidence = parse_junit(junit, expect_failure=expect_failure)
     no_symlinks(report)
     # Exclusive creation prevents replacing a pre-existing or test-created report.
     with report.open('x', encoding='utf-8') as stream:
@@ -150,11 +193,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--report', required=True)
     parser.add_argument('--junit', required=True)
+    parser.add_argument('--mode', choices=('pass', 'fail'), default='pass')
     parser.add_argument('--timeout', type=float, default=300)
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
-    run(args.report, args.junit, command, args.timeout)
+    run(args.report, args.junit, command, args.timeout, args.mode == 'fail')
     return 0
 
 

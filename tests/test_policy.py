@@ -19,8 +19,8 @@ def fixtures():
         for kind in sorted(kinds):
             cid = domain + '-' + kind
             checks.append({'id': cid, 'domains': [domain], 'kind': kind,
-                           'argv': ['trusted-test-runner', cid], 'report': 'reports/' + cid + '.json',
-                           'min_tests': 1})
+                           'argv': ['trusted-test-runner', cid, '{test_mode}'], 'report': 'reports/' + cid + '.json',
+                           'min_tests': 1, 'negative_control': {'argv': ['trusted-mutation'], 'expected_failures': ['test']}})
     config = {'verification': {'path_domains': {d: [d] for d in MINIMUM},
                                'required': {}, 'checks': checks}}
     return config, ticket
@@ -111,6 +111,7 @@ class EvidenceTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / 'report.json'
         self.good = {'status': 'passed', 'total': 3, 'passed': 3, 'failed': 0, 'skipped': 0}
+        self.good['tests'] = [{'id': str(i), 'status': 'passed'} for i in range(3)]
         self.check = {'min_tests': 2}
 
     def write(self, data): self.path.write_text(json.dumps(data), encoding='utf-8')

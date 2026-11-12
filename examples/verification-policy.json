@@ -26,13 +26,26 @@
         "{report}",
         "--junit",
         ".factory-test-output/frontend-unit.xml",
+        "--mode",
+        "{test_mode}",
         "--",
         "/ABS/trusted-project-ci/run-suite",
         "frontend-unit",
         ".factory-test-output/frontend-unit.xml"
       ],
       "report": "frontend-unit.json",
-      "min_tests": 1
+      "min_tests": 1,
+      "negative_control": {
+        "argv": [
+          "python",
+          "/ABS/trusted-project-ci/inject-defect.py",
+          "frontend-unit",
+          "{worktree}"
+        ],
+        "expected_failures": [
+          "[\"REPLACE_SUITE\",\"REPLACE_CLASS\",\"REPLACE_TEST\"]"
+        ]
+      }
     },
     {
       "id": "frontend-component",
@@ -47,13 +60,26 @@
         "{report}",
         "--junit",
         ".factory-test-output/frontend-component.xml",
+        "--mode",
+        "{test_mode}",
         "--",
         "/ABS/trusted-project-ci/run-suite",
         "frontend-component",
         ".factory-test-output/frontend-component.xml"
       ],
       "report": "frontend-component.json",
-      "min_tests": 1
+      "min_tests": 1,
+      "negative_control": {
+        "argv": [
+          "python",
+          "/ABS/trusted-project-ci/inject-defect.py",
+          "frontend-component",
+          "{worktree}"
+        ],
+        "expected_failures": [
+          "[\"REPLACE_SUITE\",\"REPLACE_CLASS\",\"REPLACE_TEST\"]"
+        ]
+      }
     },
     {
       "id": "frontend-visual",
@@ -68,13 +94,26 @@
         "{report}",
         "--junit",
         ".factory-test-output/frontend-visual.xml",
+        "--mode",
+        "{test_mode}",
         "--",
         "/ABS/trusted-project-ci/run-suite",
         "frontend-visual",
         ".factory-test-output/frontend-visual.xml"
       ],
       "report": "frontend-visual.json",
-      "min_tests": 1
+      "min_tests": 1,
+      "negative_control": {
+        "argv": [
+          "python",
+          "/ABS/trusted-project-ci/inject-defect.py",
+          "frontend-visual",
+          "{worktree}"
+        ],
+        "expected_failures": [
+          "[\"REPLACE_SUITE\",\"REPLACE_CLASS\",\"REPLACE_TEST\"]"
+        ]
+      }
     },
     {
       "id": "frontend-e2e",
@@ -89,13 +128,26 @@
         "{report}",
         "--junit",
         ".factory-test-output/frontend-e2e.xml",
+        "--mode",
+        "{test_mode}",
         "--",
         "/ABS/trusted-project-ci/run-suite",
         "frontend-e2e",
         ".factory-test-output/frontend-e2e.xml"
       ],
       "report": "frontend-e2e.json",
-      "min_tests": 1
+      "min_tests": 1,
+      "negative_control": {
+        "argv": [
+          "python",
+          "/ABS/trusted-project-ci/inject-defect.py",
+          "frontend-e2e",
+          "{worktree}"
+        ],
+        "expected_failures": [
+          "[\"REPLACE_SUITE\",\"REPLACE_CLASS\",\"REPLACE_TEST\"]"
+        ]
+      }
     },
     {
       "id": "backend-unit",
@@ -110,13 +162,26 @@
         "{report}",
         "--junit",
         ".factory-test-output/backend-unit.xml",
+        "--mode",
+        "{test_mode}",
         "--",
         "/ABS/trusted-project-ci/run-suite",
         "backend-unit",
         ".factory-test-output/backend-unit.xml"
       ],
       "report": "backend-unit.json",
-      "min_tests": 1
+      "min_tests": 1,
+      "negative_control": {
+        "argv": [
+          "python",
+          "/ABS/trusted-project-ci/inject-defect.py",
+          "backend-unit",
+          "{worktree}"
+        ],
+        "expected_failures": [
+          "[\"REPLACE_SUITE\",\"REPLACE_CLASS\",\"REPLACE_TEST\"]"
+        ]
+      }
     },
     {
       "id": "backend-api",
@@ -131,13 +196,26 @@
         "{report}",
         "--junit",
         ".factory-test-output/backend-api.xml",
+        "--mode",
+        "{test_mode}",
         "--",
         "/ABS/trusted-project-ci/run-suite",
         "backend-api",
         ".factory-test-output/backend-api.xml"
       ],
       "report": "backend-api.json",
-      "min_tests": 1
+      "min_tests": 1,
+      "negative_control": {
+        "argv": [
+          "python",
+          "/ABS/trusted-project-ci/inject-defect.py",
+          "backend-api",
+          "{worktree}"
+        ],
+        "expected_failures": [
+          "[\"REPLACE_SUITE\",\"REPLACE_CLASS\",\"REPLACE_TEST\"]"
+        ]
+      }
     },
     {
       "id": "backend-integration",
@@ -152,13 +230,26 @@
         "{report}",
         "--junit",
         ".factory-test-output/backend-integration.xml",
+        "--mode",
+        "{test_mode}",
         "--",
         "/ABS/trusted-project-ci/run-suite",
         "backend-integration",
         ".factory-test-output/backend-integration.xml"
       ],
       "report": "backend-integration.json",
-      "min_tests": 1
+      "min_tests": 1,
+      "negative_control": {
+        "argv": [
+          "python",
+          "/ABS/trusted-project-ci/inject-defect.py",
+          "backend-integration",
+          "{worktree}"
+        ],
+        "expected_failures": [
+          "[\"REPLACE_SUITE\",\"REPLACE_CLASS\",\"REPLACE_TEST\"]"
+        ]
+      }
     },
     {
       "id": "shared-contract",
@@ -173,13 +264,26 @@
         "{report}",
         "--junit",
         ".factory-test-output/shared-contract.xml",
+        "--mode",
+        "{test_mode}",
         "--",
         "/ABS/trusted-project-ci/run-suite",
         "shared-contract",
         ".factory-test-output/shared-contract.xml"
       ],
       "report": "shared-contract.json",
-      "min_tests": 1
+      "min_tests": 1,
+      "negative_control": {
+        "argv": [
+          "python",
+          "/ABS/trusted-project-ci/inject-defect.py",
+          "shared-contract",
+          "{worktree}"
+        ],
+        "expected_failures": [
+          "[\"REPLACE_SUITE\",\"REPLACE_CLASS\",\"REPLACE_TEST\"]"
+        ]
+      }
     }
   ]
 }

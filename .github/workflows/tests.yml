@@ -1,0 +1,36 @@
+name: Tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ['3.10', '3.14']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Configure deterministic Git fixtures
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+      - name: Compile Python sources
+        run: python -m compileall -q .
+      - name: Run all tests (no model credentials required)
+        env:
+          # Avoid macOS /var and /tmp symlink aliases in strict evidence path checks.
+          TMPDIR: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: python -m unittest discover -s tests -v

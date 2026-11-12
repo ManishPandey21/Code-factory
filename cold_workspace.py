@@ -32,7 +32,7 @@ def _minimal_env():
                "ComSpec", "PATHEXT")
     env = {key: os.environ[key] for key in allowed if key in os.environ}
     env.setdefault("PATH", os.defpath)
-    env.update({"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"})
+    env.update({"LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "PYTHONUTF8": "1"})
     return env
 
 
