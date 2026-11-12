@@ -27,12 +27,14 @@ def main():
     with tempfile.TemporaryDirectory() as temporary:
         home = Path(temporary)
         factory.initialize_db(home)
+        (home / '.infra-factory').mkdir()
+        (home / '.infra-factory/config.json').write_text(json.dumps({'repair_policy': {'max_repairs': 1}}), encoding='utf-8')
         with factory.connect(home) as con:
             con.execute('''INSERT INTO tickets(id,ticket,state,updated,attempts,head_sha,review_json)
                 VALUES(?,?,?,?,?,?,?)''', ('DEMO-001', json.dumps({'title': '<img src=x onerror=alert(1)>'}),
                 'AWAITING_HUMAN', 1, 1, 'a' * 40, json.dumps({'risk': {'level': 'high', 'requires_human': True}})))
             factory.record(con, 'DEMO-001', 'AWAITING_HUMAN', {'action': 'risk_review'})
-        httpd = server(home, 0)
+        httpd = server(home, 0, repo=home)
         thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         thread.start()
         try:
@@ -47,6 +49,7 @@ def main():
                 expect(page.locator('#cursor')).to_have_text('Cursor 1', timeout=10000)
                 expect(page.locator('#connection')).to_have_text(re.compile('^Live'))
                 expect(page.locator('#tickets')).to_contain_text('high · Human required')
+                expect(page.locator('#tickets')).to_contain_text('1 / 2')
                 expect(page.locator('#tickets img')).to_have_count(0)
                 expect(page.locator('#tickets')).to_contain_text('<img src=x onerror=alert(1)>')
                 page.locator('#filter').fill('missing')

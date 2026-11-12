@@ -12,6 +12,9 @@ import re
 import subprocess
 import tempfile
 
+from runtime_requirements import require_git_version
+from path_safety import checked_path
+
 
 GIT_TIMEOUT_SECONDS = 120
 _OBJECT_ID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
@@ -45,7 +48,7 @@ def env_for_checks(checkout, namespace):
     if not isinstance(namespace, str) or not namespace or "\x00" in namespace:
         raise ColdWorkspaceError("namespace must be a nonempty string without NUL")
     checkout.parent.mkdir(parents=True, exist_ok=True)
-    prefix = ".factory-home-" + hashlib.sha256(namespace.encode()).hexdigest()[:12] + "-"
+    prefix = ".factory-home-" + hashlib.sha256(namespace.encode(encoding='utf-8')).hexdigest()[:12] + "-"
     home = Path(tempfile.mkdtemp(prefix=prefix, dir=checkout.parent))
     # mkdtemp provides 0700 on POSIX; chmod makes the intended mode explicit.
     home.chmod(0o700)
@@ -68,7 +71,7 @@ def _git(destination, env, *args):
              "-c", "protocol.file.allow=always", "-c", "gc.auto=0",
              "-C", str(destination), *args],
             env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE, text=True, timeout=GIT_TIMEOUT_SECONDS,
+            stderr=subprocess.PIPE, text=True, encoding='utf-8', timeout=GIT_TIMEOUT_SECONDS,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ColdWorkspaceError("Fresh-checkout Git operation failed: " + str(exc)) from exc
@@ -88,8 +91,15 @@ def clone_candidate(source, destination, head, base):
     """
     if not all(isinstance(x, str) and _OBJECT_ID.fullmatch(x) for x in (head, base)):
         raise ColdWorkspaceError("head and base must be full lowercase Git object IDs")
+    try:
+        require_git_version()
+    except ValueError as exc:
+        raise ColdWorkspaceError(str(exc)) from exc
     source = Path(source).resolve(strict=True)
-    destination = Path(destination).absolute()
+    try:
+        destination = checked_path(destination)
+    except ValueError as exc:
+        raise ColdWorkspaceError(str(exc)) from exc
     if destination.exists() or destination.is_symlink():
         raise ColdWorkspaceError("Cold checkout destination must not already exist")
     destination.mkdir(parents=True)

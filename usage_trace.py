@@ -16,6 +16,7 @@ import time
 import uuid
 
 from runtime import FactoryError
+from path_safety import checked_path
 
 
 EXPECTED_ERRORS = (FactoryError, OSError, ValueError, KeyError, TypeError,
@@ -29,10 +30,8 @@ def _append(home, event):
     hold this connection while doing work or touch the authoritative ledger.
     """
     try:
-        home = Path(home).absolute()
-        path = home / 'usage.sqlite3'
-        if any(p.is_symlink() for p in (path, *path.parents)):
-            raise OSError('symlinked trace path')
+        home = checked_path(home)
+        path = checked_path(home / 'usage.sqlite3')
         home.mkdir(parents=True, exist_ok=True)
         try:
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)

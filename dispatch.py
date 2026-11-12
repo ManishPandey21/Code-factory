@@ -50,7 +50,7 @@ def routing_evidence(result_path, spec):
         if strict_routing(spec):
             raise FactoryError(f'Missing routing evidence {path.name} for a strict-routing command')
         return None
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding='utf-8'))
     if not isinstance(data, dict) or data.get('outcome') != 'ok':
         raise FactoryError(f'Routing evidence {path.name} does not record a successful run')
     if strict_routing(spec):
@@ -113,7 +113,7 @@ def execute_ticket(repo, home, c, ticket, base, repair=None, repair_request=None
         if git(work, 'rev-parse', 'HEAD^') != base:
             raise FactoryError('Candidate is not exactly one commit above base')
         assert_committed_scope(work, ticket, base, head)
-        guard_verification_inputs(work, ticket, base, head, c)
+        guard_verification_inputs(work, ticket, base, head, c, source_repo=repo)
         validate_handoff(work, ticket, required=c.get('workflow') == 'egm')
         update(home, tid, 'REVIEWING', head_sha=head)
         files = diff_paths(work, base, head)
@@ -130,7 +130,7 @@ def execute_ticket(repo, home, c, ticket, base, repair=None, repair_request=None
             run_agent(reviewer_spec, checkout, logs / ('review-' + lens + '-prompt.txt'), result,
                       logs / ('review-' + lens + '.log'), c['timeout_seconds'], prompt)
             reviewer_routing = routing_evidence(result, reviewer_spec)
-            review = json.loads(result.read_text())
+            review = json.loads(result.read_text(encoding='utf-8'))
             if review.get('verdict') not in ('PASS', 'CHANGES_REQUIRED', 'INCONCLUSIVE') or not isinstance(review.get('findings'), list):
                 raise FactoryError('Malformed review result')
             if review.get('reviewed_head') != head or review.get('base') != base:
@@ -159,7 +159,7 @@ def execute_ticket(repo, home, c, ticket, base, repair=None, repair_request=None
             prompt = risk_prompt(head, base, result, ticket, files)
             spec = c['commands']['risk_assessor']
             run_agent(spec, checkout, logs / 'risk-prompt.txt', result, logs / 'risk.log', c['timeout_seconds'], prompt)
-            risk = review_policy.assess(policy, json.loads(result.read_text()), files, head, base, ticket['role'] == 'critical')
+            risk = review_policy.assess(policy, json.loads(result.read_text(encoding='utf-8')), files, head, base, ticket['role'] == 'critical')
             routing = routing_evidence(result, spec)
             if routing:
                 risk['routing'] = routing

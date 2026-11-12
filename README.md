@@ -19,7 +19,7 @@ The original classic workflow remains available. See [CHANGELOG.md](CHANGELOG.md
 
 A desktop-led, local coding toolkit for Claude Code and Codex: one coordinator, two independent tickets, builder worktrees, independent cold repositories, executable checks, mandatory standards/spec plus policy-selected specialist reviews and guarded draft-PR publication. No automatic merge or deployment.
 
-This is standalone Python source, not a globally installed skill. Download and extract the package into a stable tools directory outside your application repository. No pip dependencies. Python 3.10+, Git and authenticated local coding CLIs are needed. GitHub CLI (`gh`) and authenticated Git push are needed for publishing; `gh` is also needed for GitHub CI repair.
+This is standalone Python source, not a globally installed skill. Download and extract the package into a stable tools directory outside your application repository. No pip dependencies. Python 3.10+, Git >= 2.29 and authenticated local coding CLIs are needed. GitHub CLI (`gh`) and authenticated Git push are needed for publishing; `gh` is also needed for GitHub CI repair.
 
 **Validation boundary:** the included integration suite runs real Git worktrees with deterministic fake CLI workers/reviewers. This validates orchestration, transport and rejection cases. It does not prove real model quality or your local authentication. A real Claude/Codex pilot remains an onboarding step. The automated CI matrix covers Linux, macOS and Windows on Python 3.10 and 3.14; consult its actual results before relying on a platform. Local validation in this change is Linux only.
 
@@ -31,6 +31,13 @@ observed test IDs. Existing count-only policies require migration and fresh runs
 See [configuration and migration](docs/NAMED_EVIDENCE.md).
 
 Licensed under the [MIT License](LICENSE).
+
+Unreleased local hardening addresses verification-wrapper protection, Git version
+checks, UTF-8 text transport, platform path aliases and malformed CI responses.
+See [audit follow-up](docs/LOCAL_HARDENING.md). Beyond a local pilot, the
+[AUDIT.md production blockers](docs/AUDIT.md#production-release-blockers-and-required-acceptance)
+require isolated identities, trusted signed verification and GitHub branch
+protection with a merge queue; local checks do not replace them.
 
 ## Mandatory v0.3 setup
 

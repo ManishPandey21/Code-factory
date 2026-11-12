@@ -20,8 +20,8 @@ def make_skills(root):
             d = root / provider / prefix / name
             d.mkdir(parents=True)
             flag = '\ndisable-model-invocation: true' if name == 'to-tickets' else ''
-            (d / 'SKILL.md').write_text(f'---\nname: {name}{flag}\n---\nUse this fixture skill.')
-            (d / 'reference.md').write_text('Referenced fixture guidance')
+            (d / 'SKILL.md').write_text(f'---\nname: {name}{flag}\n---\nUse this fixture skill.', encoding='utf-8')
+            (d / 'reference.md').write_text('Referenced fixture guidance', encoding='utf-8')
     return inventory.discover({p: root / p for p in inventory.CATALOG})
 
 
@@ -48,13 +48,13 @@ class InventoryTests(unittest.TestCase):
                      'disable-model-invocation: false\ndisable-model-invocation: true',
                      '<<: *defaults'):
             with self.subTest(keys=keys):
-                path.write_text('---\nname: codebase-design\n' + keys + '\n---\nBody')
+                path.write_text('---\nname: codebase-design\n' + keys + '\n---\nBody', encoding='utf-8')
                 with self.assertRaisesRegex(ValueError, 'frontmatter key'):
                     inventory.helper_prompt({'support_skills': {'design': str(path)}})
 
     def test_changed_reference_is_not_silently_trusted(self):
         entry = self.data['skills']['superpowers:systematic-debugging']
-        Path(entry['path']).with_name('reference.md').write_text('Changed')
+        Path(entry['path']).with_name('reference.md').write_text('Changed', encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'content changed'):
             inventory.validate_inventory(self.data)
 
@@ -66,8 +66,8 @@ class InventoryTests(unittest.TestCase):
     def test_user_only_helper_is_not_dispatched(self):
         entry = self.data['skills']['matt:codebase-design']
         p = Path(entry['path'])
-        p.write_text(p.read_text().replace('name: codebase-design',
-                                         'name: codebase-design\ndisable-model-invocation: true'))
+        p.write_text(p.read_text(encoding='utf-8').replace('name: codebase-design',
+                                         'name: codebase-design\ndisable-model-invocation: true'), encoding='utf-8')
         data = inventory.discover({p: self.root / p for p in inventory.CATALOG})
         _, helpers = inventory.builder_skills(data)
         self.assertNotIn('design', helpers)
@@ -77,18 +77,18 @@ class InventoryTests(unittest.TestCase):
     def test_ambiguous_installation_is_rejected(self):
         d = self.root / 'matt/skills/codebase-design'
         d.mkdir()
-        (d / 'SKILL.md').write_text('---\nname: codebase-design\n---\nDuplicate')
+        (d / 'SKILL.md').write_text('---\nname: codebase-design\n---\nDuplicate', encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'Ambiguous'):
             inventory.discover({'matt': self.root / 'matt'})
 
     def test_configuration_uses_inventory_for_both_providers(self):
         config = self.root / '.infra-factory/config.json'
-        config.parent.mkdir(); config.write_text(json.dumps({'commands': {}, 'checks': [['test']]}))
-        manifest = self.root / 'inventory.json'; manifest.write_text(json.dumps(self.data))
+        config.parent.mkdir(); config.write_text(json.dumps({'commands': {}, 'checks': [['test']]}), encoding='utf-8')
+        manifest = self.root / 'inventory.json'; manifest.write_text(json.dumps(self.data), encoding='utf-8')
         for provider in ('claude', 'codex'):
             p = subprocess.run([sys.executable, str(ROOT / 'configure.py'), '--repo', str(self.root),
                                 '--skills-inventory', str(manifest), '--provider', provider,
-                                '--model', 'test-model', '--egm'], capture_output=True, text=True)
+                                '--model', 'test-model', '--egm'], capture_output=True, text=True, encoding='utf-8')
             self.assertEqual(p.returncode, 0, p.stderr)
             c = json.loads(p.stdout)
             self.assertEqual(c['checks'], [['test']])
@@ -98,7 +98,7 @@ class InventoryTests(unittest.TestCase):
                     self.assertNotIn('support_skills', spec)
                 else:
                     self.assertEqual(set(spec['support_skills']), set(inventory.BUILDER_HELPERS))
-            self.assertEqual(json.loads(config.read_text()), {'commands': {}, 'checks': [['test']]})
+            self.assertEqual(json.loads(config.read_text(encoding='utf-8')), {'commands': {}, 'checks': [['test']]})
 
 
 class BuilderSkillTests(unittest.TestCase):
@@ -113,23 +113,23 @@ class BuilderSkillTests(unittest.TestCase):
     def test_real_factory_dispatches_helpers_and_blocks_changed_inventory(self):
         data = make_skills(self.home / 'installed')
         tdd, helpers = inventory.builder_skills(data)
-        c = json.loads(self.cfg.read_text())
+        c = json.loads(self.cfg.read_text(encoding='utf-8'))
         c['skill_inventory'] = data
         for role, spec in c['commands'].items():
             if role != 'reviewer':
                 spec['primary_skill'] = tdd
                 spec['support_skills'] = helpers
-        self.cfg.write_text(json.dumps(c)); self.commit()
+        self.cfg.write_text(json.dumps(c), encoding='utf-8'); self.commit()
         self.add('A'); self.cli('run', '--execute')
         row = self.states()['A']
         self.assertEqual(row['state'], 'READY', row['error'])
         logs = self.repo / '.git/infra-factory/logs' / Path(row['worktree']).name
-        prompt = (logs / 'builder-prompt.txt').read_text()
+        prompt = (logs / 'builder-prompt.txt').read_text(encoding='utf-8')
         for path in helpers.values():
             self.assertIn(path, prompt)
-        self.assertNotIn('Conditional skill support', (logs / 'review-spec-prompt.txt').read_text())
+        self.assertNotIn('Conditional skill support', (logs / 'review-spec-prompt.txt').read_text(encoding='utf-8'))
         reference = Path(helpers['debugging']).with_name('reference.md')
-        reference.write_text('Changed after approval')
+        reference.write_text('Changed after approval', encoding='utf-8')
         self.cli('publish', '--ticket', 'A', code=2)
         self.cli('run', '--execute', code=2)
 

@@ -14,7 +14,7 @@
 | CI workflow YAML and matrix | Parses; 3 operating systems × 2 Python versions |
 
 The main regression run and subsequently added tracing suite cover all **214**
-tests currently discovered. Counts for targeted reruns are not additive.
+tests discovered before integrating the newer main branch. Counts for targeted reruns are not additive.
 Full outputs: [regression log](VALIDATION_CURRENT.log) and
 [tracing log](VALIDATION_USAGE.log).
 
@@ -29,6 +29,19 @@ git diff --check
 The initial named-evidence regressions were also observed failing before the
 implementation: count-only evidence, unnamed/duplicate tests and unsupported
 acceptance references were accepted by the old implementation.
+
+## Integration with main
+
+Integrated `a780fce` while retaining its runtime-version checks, path safety,
+protected command inputs, ticket-update whitelist and UTF-8 handling. All 234
+combined tests passed with ResourceWarning treated as an error (four isolated
+module runners, 443.449 seconds). Three additional interaction regressions passed,
+for **237 unique tests** in the final suite. Compilation and diff checks passed.
+Full output: [integration log](VALIDATION_MERGE.log).
+
+The interaction tests ensure negative-control destinations remain editable while
+configured check runners and mutator scripts remain protected. Independent
+reviews found no remaining blocking issues after these fixes.
 
 ## Verified behavior
 

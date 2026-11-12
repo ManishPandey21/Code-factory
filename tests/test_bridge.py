@@ -11,7 +11,7 @@ ROOT=Path(__file__).resolve().parents[1]
 class BridgeTests(unittest.TestCase):
     def fixture_run(self, directory, provider, body, env=None, mode='reviewer'):
         fixture = directory / provider
-        fixture.write_text('#!' + sys.executable + '\n' + body)
+        fixture.write_text('#!' + sys.executable + '\n' + body, encoding='utf-8')
         fixture.chmod(0o755)
         environment = dict(os.environ) if env is None else dict(env)
         environment['PATH'] = str(directory) + os.pathsep + environment.get('PATH', '')
@@ -19,20 +19,20 @@ class BridgeTests(unittest.TestCase):
             sys.executable, str(ROOT / 'agent_bridge.py'), '--provider', provider,
             '--mode', mode, '--model', 'fixture', '--prompt-file', str(directory / 'prompt.txt'),
             '--result-file', str(directory / 'result.json')],
-            env=environment, capture_output=True, text=True)
+            env=environment, capture_output=True, text=True, encoding='utf-8')
 
     def profile_check(self, provider, fail=False):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)
-            (d / 'prompt.txt').write_text('Review independently')
+            (d / 'prompt.txt').write_text('Review independently', encoding='utf-8')
             original = d / 'original-home'
             original.mkdir()
             config = original / ('.codex' if provider == 'codex' else '.claude')
             config.mkdir()
             credential = 'auth.json' if provider == 'codex' else '.credentials.json'
-            (config / credential).write_text('{"fixture":"not-a-real-secret"}')
+            (config / credential).write_text('{"fixture":"not-a-real-secret"}', encoding='utf-8')
             for name in ('config.toml', 'settings.json', 'history.jsonl', 'AGENTS.md', 'CLAUDE.md'):
-                (config / name).write_text('BUILDER MEMORY MUST NOT BE COPIED')
+                (config / name).write_text('BUILDER MEMORY MUST NOT BE COPIED', encoding='utf-8')
             witness = d / 'witness.json'
             env = dict(os.environ)
             env.update({'HOME': str(original), 'USERPROFILE': str(original),
@@ -66,8 +66,8 @@ sys.stdin.read()
                 body += "assert '--no-session-persistence' in sys.argv\nassert os.environ['ANTHROPIC_API_KEY']=='fixture-anthropic'\nassert 'OPENAI_API_KEY' not in os.environ\nprint(json.dumps({'result':'{}'}))\n"
             p = self.fixture_run(d, provider, body, env)
             self.assertEqual(p.returncode, 7 if fail else 0, p.stdout + p.stderr)
-            self.assertFalse(Path(json.loads(witness.read_text())['home']).exists())
-            self.assertEqual((config / credential).read_text(), '{"fixture":"not-a-real-secret"}')
+            self.assertFalse(Path(json.loads(witness.read_text(encoding='utf-8'))['home']).exists())
+            self.assertEqual((config / credential).read_text(encoding='utf-8'), '{"fixture":"not-a-real-secret"}')
 
     def test_codex_cold_profile(self): self.profile_check('codex')
     def test_claude_cold_profile(self): self.profile_check('claude')
@@ -77,12 +77,12 @@ sys.stdin.read()
         for symlink in (False, True):
             with self.subTest(symlink=symlink), tempfile.TemporaryDirectory() as td:
                 d = Path(td)
-                (d / 'prompt.txt').write_text('Review')
+                (d / 'prompt.txt').write_text('Review', encoding='utf-8')
                 final = d / 'result.json'
                 if symlink:
                     final.symlink_to(d / 'missing-target')
                 else:
-                    final.write_text('stale')
+                    final.write_text('stale', encoding='utf-8')
                 p = self.fixture_run(d, 'codex', "raise RuntimeError('must never run')\n")
                 self.assertEqual(p.returncode, 2)
                 self.assertIn('Result path already exists', p.stderr)
@@ -91,18 +91,18 @@ sys.stdin.read()
     def test_result_planted_during_cli_rejected(self):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)
-            (d / 'prompt.txt').write_text('Review')
+            (d / 'prompt.txt').write_text('Review', encoding='utf-8')
             body = ('import sys\nfrom pathlib import Path\n'
                     f"Path({str(d / 'result.json')!r}).write_text('planted')\n"
                     "Path(sys.argv[sys.argv.index('--output-last-message')+1]).write_text('{}')\n")
             p = self.fixture_run(d, 'codex', body)
             self.assertEqual(p.returncode, 2)
-            self.assertEqual((d / 'result.json').read_text(), 'planted')
+            self.assertEqual((d / 'result.json').read_text(encoding='utf-8'), 'planted')
 
     def test_prompt_mutation_rejected(self):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)
-            (d / 'prompt.txt').write_text('Review')
+            (d / 'prompt.txt').write_text('Review', encoding='utf-8')
             body = ('import sys\nfrom pathlib import Path\n'
                     f"Path({str(d / 'prompt.txt')!r}).write_text('changed')\n"
                     "Path(sys.argv[sys.argv.index('--output-last-message')+1]).write_text('{}')\n")
@@ -114,7 +114,7 @@ sys.stdin.read()
     def test_builder_environment_preserved(self):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)
-            (d / 'prompt.txt').write_text('Build')
+            (d / 'prompt.txt').write_text('Build', encoding='utf-8')
             env = dict(os.environ, INFRA_TEST_BUILDER='retained')
             body = ("import os,sys\nfrom pathlib import Path\n"
                     "assert os.environ['INFRA_TEST_BUILDER']=='retained'\n"
@@ -122,11 +122,11 @@ sys.stdin.read()
                     "Path(sys.argv[sys.argv.index('--output-last-message')+1]).write_text('Built')\n")
             p = self.fixture_run(d, 'codex', body, env, mode='builder')
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-            self.assertEqual(json.loads((d / 'result.json').read_text()), {'summary': 'Built'})
+            self.assertEqual(json.loads((d / 'result.json').read_text(encoding='utf-8')), {'summary': 'Built'})
 
     def check(self,provider,broken=False):
         with tempfile.TemporaryDirectory() as td:
-            d=Path(td); prompt=d/'prompt.txt';prompt.write_text('Review the candidate')
+            d=Path(td); prompt=d/'prompt.txt';prompt.write_text('Review the candidate', encoding='utf-8')
             final=d/'result.json'
             fixture=d/provider
             body="""import json,sys
@@ -140,11 +140,11 @@ data={'verdict':'PASS','reviewed_head':'abc','base':'def','findings':[]}
                 body+="assert sys.argv[sys.argv.index('--sandbox')+1]=='read-only'\nPath(sys.argv[sys.argv.index('--output-last-message')+1]).write_text("+repr('not json' if broken else json.dumps({'verdict':'PASS','reviewed_head':'abc','base':'def','findings':[]}))+ ")\n"
             else:
                 body+="assert sys.argv[sys.argv.index('--permission-mode')+1]=='plan'\nprint(json.dumps({'is_error': "+repr(broken)+",'result':json.dumps(data)}))\n"
-            fixture.write_text('#!'+sys.executable+'\n'+body);fixture.chmod(0o755)
+            fixture.write_text('#!'+sys.executable+'\n'+body, encoding='utf-8');fixture.chmod(0o755)
             env=dict(os.environ);env['PATH']=str(d)+os.pathsep+env['PATH']
-            p=subprocess.run([sys.executable,str(ROOT/'agent_bridge.py'),'--provider',provider,'--mode','reviewer','--model','fixture','--prompt-file',str(prompt),'--result-file',str(final)],env=env,capture_output=True,text=True)
+            p=subprocess.run([sys.executable,str(ROOT/'agent_bridge.py'),'--provider',provider,'--mode','reviewer','--model','fixture','--prompt-file',str(prompt),'--result-file',str(final)],env=env,capture_output=True,text=True, encoding='utf-8')
             self.assertEqual(p.returncode,2 if broken else 0,p.stdout+p.stderr)
-            if not broken: self.assertEqual(json.loads(final.read_text())['verdict'],'PASS')
+            if not broken: self.assertEqual(json.loads(final.read_text(encoding='utf-8'))['verdict'],'PASS')
     def test_codex_final(self):self.check('codex')
     def test_claude_final(self):self.check('claude')
     def test_codex_invalid_json(self):self.check('codex',True)

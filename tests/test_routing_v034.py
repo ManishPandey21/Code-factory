@@ -74,12 +74,12 @@ class StrictBridgeTests(unittest.TestCase):
         self.bin.mkdir()
         for name, body in (('claude', FAKE_CLAUDE), ('codex', FAKE_CODEX)):
             f = self.bin / name
-            f.write_text('#!' + sys.executable + '\n' + body.replace('KNOBS', repr(str(self.d / 'knobs.json'))))
+            f.write_text('#!' + sys.executable + '\n' + body.replace('KNOBS', repr(str(self.d / 'knobs.json'))), encoding='utf-8')
             f.chmod(0o755)
         self.home = self.d / 'home'
         (self.home / '.claude').mkdir(parents=True)
-        (self.home / '.claude' / '.credentials.json').write_text('{"fixture": true}')
-        (self.d / 'prompt.txt').write_text('Do the work')
+        (self.home / '.claude' / '.credentials.json').write_text('{"fixture": true}', encoding='utf-8')
+        (self.d / 'prompt.txt').write_text('Do the work', encoding='utf-8')
         self.work = self.d / 'work'
         self.work.mkdir()
         self.witness = self.d / 'witness.json'
@@ -96,7 +96,7 @@ class StrictBridgeTests(unittest.TestCase):
             knobs['served'] = served
         if result is not None:
             knobs['result'] = result
-        (self.d / 'knobs.json').write_text(json.dumps(knobs))
+        (self.d / 'knobs.json').write_text(json.dumps(knobs), encoding='utf-8')
         environment = {k: v for k, v in os.environ.items() if not k.startswith(('FAKE_', 'CLAUDE_CODE_', 'ANTHROPIC_'))}
         environment.update({'PATH': str(self.bin) + os.pathsep + os.environ['PATH'], 'HOME': str(self.home),
                             'CLAUDE_CONFIG_DIR': str(self.home / '.claude'), 'FAKE_WITNESS': str(self.witness)})
@@ -106,16 +106,16 @@ class StrictBridgeTests(unittest.TestCase):
                 '--strict-routing']
         if effort:
             argv += ['--effort', effort]
-        return subprocess.run(argv + list(extra), cwd=self.work, env=environment, capture_output=True, text=True)
+        return subprocess.run(argv + list(extra), cwd=self.work, env=environment, capture_output=True, text=True, encoding='utf-8')
 
     def evidence(self):
-        return json.loads(self.result.with_name('builder-result.routing.json').read_text())
+        return json.loads(self.result.with_name('builder-result.routing.json').read_text(encoding='utf-8'))
 
     def test_effort_flag_and_env_agree_even_when_the_environment_says_otherwise(self):
         p = self.bridge(effort='medium', CLAUDE_CODE_EFFORT_LEVEL='max', ANTHROPIC_DEFAULT_OPUS_MODEL='claude-x-1-0',
                         ANTHROPIC_MODEL='claude-y-1-0')
         self.assertEqual(p.returncode, 0, p.stderr)
-        w = json.loads(self.witness.read_text())
+        w = json.loads(self.witness.read_text(encoding='utf-8'))
         self.assertEqual(w['argv'][w['argv'].index('--effort') + 1], 'medium')
         self.assertEqual(w['effort_env'], 'medium', 'CLAUDE_CODE_EFFORT_LEVEL overrides --effort in the CLI')
         self.assertEqual(w['no_fallback'], '1')
@@ -134,8 +134,8 @@ class StrictBridgeTests(unittest.TestCase):
         p = self.bridge()
         self.assertEqual(p.returncode, 0, p.stderr)
         transcript = self.result.with_name('builder-result.transcript.jsonl')
-        self.assertEqual(json.loads(transcript.read_text().splitlines()[0])['subtype'], 'init')
-        self.assertEqual(json.loads(self.result.read_text()), {'summary': 'done'})
+        self.assertEqual(json.loads(transcript.read_text(encoding='utf-8').splitlines()[0])['subtype'], 'init')
+        self.assertEqual(json.loads(self.result.read_text(encoding='utf-8')), {'summary': 'done'})
 
     def test_low_medium_high_reach_the_cli(self):
         for effort in ('low', 'medium', 'high'):
@@ -143,7 +143,7 @@ class StrictBridgeTests(unittest.TestCase):
                 f.unlink()
             p = self.bridge(effort=effort)
             self.assertEqual(p.returncode, 0, p.stderr)
-            self.assertEqual(json.loads(self.witness.read_text())['effort_env'], effort)
+            self.assertEqual(json.loads(self.witness.read_text(encoding='utf-8'))['effort_env'], effort)
 
     def test_strict_routing_requires_an_effort(self):
         p = self.bridge(effort=None)
@@ -180,7 +180,7 @@ class StrictBridgeTests(unittest.TestCase):
 
     def test_effort_cap_in_settings_is_refused_not_clamped(self):
         (self.work / '.claude').mkdir()
-        (self.work / '.claude' / 'settings.json').write_text(json.dumps({'maxEffortLevel': 'medium'}))
+        (self.work / '.claude' / 'settings.json').write_text(json.dumps({'maxEffortLevel': 'medium'}), encoding='utf-8')
         p = self.bridge(effort='high')
         self.assertEqual(p.returncode, 2)
         self.assertIn('maxEffortLevel', p.stderr)
@@ -193,7 +193,7 @@ class StrictBridgeTests(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
 
     def test_stale_routing_evidence_is_refused(self):
-        self.result.with_name('builder-result.routing.json').write_text('{"outcome": "ok"}')
+        self.result.with_name('builder-result.routing.json').write_text('{"outcome": "ok"}', encoding='utf-8')
         p = self.bridge()
         self.assertEqual(p.returncode, 2)
         self.assertIn('stale evidence', p.stderr)
@@ -203,16 +203,16 @@ class StrictBridgeTests(unittest.TestCase):
         p = self.bridge(mode='reviewer', model='claude-fable-5-2', CLAUDE_CODE_EFFORT_LEVEL='low',
                         result=json.dumps({'verdict': 'PASS', 'reviewed_head': 'a', 'base': 'b', 'findings': []}))
         self.assertEqual(p.returncode, 0, p.stderr)
-        w = json.loads(self.witness.read_text())
+        w = json.loads(self.witness.read_text(encoding='utf-8'))
         self.assertEqual(w['effort_env'], 'high')
         self.assertEqual(w['argv'][w['argv'].index('--permission-mode') + 1], 'plan')
-        ev = json.loads(self.result.with_name('review-spec-result.routing.json').read_text())
+        ev = json.loads(self.result.with_name('review-spec-result.routing.json').read_text(encoding='utf-8'))
         self.assertEqual((ev['mode'], ev['requested_model'], ev['outcome']), ('reviewer', 'claude-fable-5-2', 'ok'))
 
     def test_codex_remains_supported_with_explicit_effort(self):
         p = self.bridge(provider='codex', model='gpt-6.1-sol', effort='medium')
         self.assertEqual(p.returncode, 0, p.stderr)
-        argv = json.loads(self.witness.read_text())['argv']
+        argv = json.loads(self.witness.read_text(encoding='utf-8'))['argv']
         self.assertEqual(argv[argv.index('-c') + 1], 'model_reasoning_effort="medium"')
         self.assertFalse(self.evidence()['served_models_verified'])
         for f in self.result.parent.iterdir():
@@ -221,13 +221,13 @@ class StrictBridgeTests(unittest.TestCase):
         self.assertEqual(p.returncode, 2)
 
     def test_legacy_configuration_is_unchanged(self):
-        (self.d / 'knobs.json').write_text(json.dumps({'witness': str(self.witness)}))
+        (self.d / 'knobs.json').write_text(json.dumps({'witness': str(self.witness)}), encoding='utf-8')
         environment = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ['PATH'])
         p = subprocess.run([sys.executable, str(ROOT / 'agent_bridge.py'), '--provider', 'claude', '--mode', 'builder',
                             '--model', 'sonnet', '--prompt-file', str(self.d / 'prompt.txt'),
-                            '--result-file', str(self.result)], cwd=self.work, env=environment, capture_output=True, text=True)
+                            '--result-file', str(self.result)], cwd=self.work, env=environment, capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertNotIn('--effort', json.loads(self.witness.read_text())['argv'])
+        self.assertNotIn('--effort', json.loads(self.witness.read_text(encoding='utf-8'))['argv'])
         self.assertFalse(self.result.with_name('builder-result.routing.json').exists())
 
 
@@ -272,7 +272,7 @@ class RoutingSelectionTests(unittest.TestCase):
             with self.assertRaises(self.f.FactoryError):
                 self.f.routing_evidence(result, {'argv': ['bridge', '--strict-routing']})
             self.assertIsNone(self.f.routing_evidence(result, {'argv': ['bridge']}))
-            result.with_name('review-spec-result.routing.json').write_text(json.dumps({'outcome': 'routing_refused'}))
+            result.with_name('review-spec-result.routing.json').write_text(json.dumps({'outcome': 'routing_refused'}), encoding='utf-8')
             with self.assertRaises(self.f.FactoryError):
                 self.f.routing_evidence(result, {'argv': ['bridge', '--strict-routing']})
 
@@ -294,7 +294,7 @@ class AttemptHistoryTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def factory(self, args, check=True):
-        p = subprocess.run([sys.executable, str(ROOT / 'factory.py')] + args, capture_output=True, text=True)
+        p = subprocess.run([sys.executable, str(ROOT / 'factory.py')] + args, capture_output=True, text=True, encoding='utf-8')
         if check:
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         return p
@@ -306,7 +306,7 @@ class AttemptHistoryTests(unittest.TestCase):
                       'data': {'not_applicable': 'n'}, 'cross_cutting': {'not_applicable': 'n'}}}
         t.update(extra)
         path = Path(self.tmp.name) / (tid + '.json')
-        path.write_text(json.dumps(t))
+        path.write_text(json.dumps(t), encoding='utf-8')
         return self.factory(['add', '--repo', str(self.repo), '--ticket', str(path)], check)
 
     def set_state(self, tid, state, attempts):
@@ -369,12 +369,12 @@ class ConfigureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             repo = Path(td)
             (repo / '.infra-factory').mkdir()
-            (repo / '.infra-factory' / 'config.json').write_text(json.dumps({'version': 1, 'commands': {}}))
+            (repo / '.infra-factory' / 'config.json').write_text(json.dumps({'version': 1, 'commands': {}}), encoding='utf-8')
             skill = repo / 'SKILL.md'
-            skill.write_text('tdd')
+            skill.write_text('tdd', encoding='utf-8')
             p = subprocess.run([sys.executable, str(ROOT / 'configure.py'), '--repo', str(repo), '--tdd-skill', str(skill),
                                 '--provider', 'claude', '--model', 'claude-test-1',
-                                '--route', 'builder_routine=codex:gpt-6.1-sol:medium'], capture_output=True, text=True)
+                                '--route', 'builder_routine=codex:gpt-6.1-sol:medium'], capture_output=True, text=True, encoding='utf-8')
             self.assertEqual(p.returncode, 0, p.stderr)
             commands = json.loads(p.stdout)['commands']
             for role, spec in commands.items():
@@ -384,7 +384,7 @@ class ConfigureTests(unittest.TestCase):
             self.assertEqual(commands['reviewer_spec_critical']['model'], 'claude-test-1')
             self.assertNotIn('fable', json.dumps({k: v['model'] for k, v in commands.items() if 'critical' not in k}))
             bad = subprocess.run([sys.executable, str(ROOT / 'configure.py'), '--repo', str(repo), '--tdd-skill', str(skill),
-                                  '--route', 'builder_routine=codex:gpt-6.1-sol:xhigh'], capture_output=True, text=True)
+                                  '--route', 'builder_routine=codex:gpt-6.1-sol:xhigh'], capture_output=True, text=True, encoding='utf-8')
             self.assertNotEqual(bad.returncode, 0)
 
 

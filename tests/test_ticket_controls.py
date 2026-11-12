@@ -59,9 +59,9 @@ class TicketControlTests(unittest.TestCase):
         self.hold()
         self.cli('retry', '--ticket', 'A', code=2)
         self.cli('reject', '--ticket', 'A', code=2)
-        ticket = json.loads((self.home / 'A.json').read_text())
+        ticket = json.loads((self.home / 'A.json').read_text(encoding='utf-8'))
         ticket.update(id='B', supersedes=['A'])
-        replacement = self.home / 'B.json'; replacement.write_text(json.dumps(ticket))
+        replacement = self.home / 'B.json'; replacement.write_text(json.dumps(ticket), encoding='utf-8')
         self.cli('add', '--ticket', str(replacement), code=2)
         self.release(); self.cli('retry', '--ticket', 'A')
         # Held pending work reserves its paths even before its first candidate.
@@ -82,7 +82,7 @@ class TicketControlTests(unittest.TestCase):
 
     def test_control_status_and_release_work_with_broken_configuration(self):
         self.add('A'); self.hold()
-        self.cfg.write_text('{broken')
+        self.cfg.write_text('{broken', encoding='utf-8')
         status = json.loads(self.cli('status').stdout)
         self.assertTrue(status['configuration_error'])
         self.assertEqual(status['tickets'][0]['hold_version'], 1)
@@ -102,10 +102,10 @@ class TicketControlTests(unittest.TestCase):
 
     def test_invalid_inventory_path_still_allows_inspection(self):
         self.add('A'); self.hold()
-        config = json.loads(self.cfg.read_text())
+        config = json.loads(self.cfg.read_text(encoding='utf-8'))
         config['skill_inventory'] = {'version': 1, 'skills': {
             'matt:codebase-design': {'available': True, 'path': None}}}
-        self.cfg.write_text(json.dumps(config))
+        self.cfg.write_text(json.dumps(config), encoding='utf-8')
         status = json.loads(self.cli('status').stdout)
         self.assertTrue(status['configuration_error'])
         self.assertEqual(status['tickets'][0]['hold_version'], 1)
@@ -132,8 +132,8 @@ class TicketControlTests(unittest.TestCase):
         self.assertEqual(self.event_count(), before)
         self.assertEqual(self.states()['A']['hold_version'], 1)
         self.cli('add', '--ticket', str(self.home / 'A.json'), code=2)
-        ticket = json.loads((self.home / 'A.json').read_text()); ticket['title'] = 'Different request'
-        (self.home / 'A.json').write_text(json.dumps(ticket))
+        ticket = json.loads((self.home / 'A.json').read_text(encoding='utf-8')); ticket['title'] = 'Different request'
+        (self.home / 'A.json').write_text(json.dumps(ticket), encoding='utf-8')
         self.cli('add', '--ticket', str(self.home / 'A.json'), '--idempotent', code=2)
         self.assertEqual(self.event_count(), before)
 
@@ -141,8 +141,8 @@ class TicketControlTests(unittest.TestCase):
         # Reuse the fixture schema, with a new unused ID.
         self.add('seed')
         path = self.home / 'seed.json'
-        ticket = json.loads(path.read_text()); ticket['id'] = 'new'; ticket['paths'] = ['new.py']
-        path.write_text(json.dumps(ticket))
+        ticket = json.loads(path.read_text(encoding='utf-8')); ticket['id'] = 'new'; ticket['paths'] = ['new.py']
+        path.write_text(json.dumps(ticket), encoding='utf-8')
         first = json.loads(self.cli('add', '--ticket', str(path), '--idempotent').stdout)
         second = json.loads(self.cli('add', '--ticket', str(path), '--idempotent').stdout)
         self.assertFalse(first['replayed']); self.assertTrue(second['replayed'])

@@ -29,7 +29,7 @@ import time
 
 EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')   # Claude Code CLI `--effort` levels, in order
 CODEX_EFFORTS = ('low', 'medium', 'high')             # Codex model_reasoning_effort values used here
-FULL_CLAUDE_ID = re.compile(r'claude-[a-z]+(-[0-9]+)+')
+FULL_CLAUDE_ID = re.compile(r'claude-(?:[a-z]+(?:-[0-9]+)+|[0-9]+(?:-[0-9]+)*-[a-z]+-[0-9]{8})')
 # Variables that could change which model or effort a strict run uses. They are removed (or, for
 # the effort level, set explicitly) so the requested pair is the effective one.
 MODEL_OVERRIDES = ('ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL',
@@ -260,12 +260,12 @@ def run(a, evidence):
                     evidence['effort_controls'] = {'codex_config': f'model_reasoning_effort={a.effort}'}
                     # Codex reports no per-run model usage here; the requested pair is recorded as is.
                     evidence['served_models_verified'] = False
-                result = subprocess.run(args, input=prompt, text=True, env=env)
+                result = subprocess.run(args, input=prompt, text=True, env=env, encoding='utf-8')
                 if result.returncode:
                     return result.returncode
                 if final.is_symlink():
                     raise ValueError('CLI result must not be a symlink')
-                output = final.read_text()
+                output = final.read_text(encoding='utf-8')
         else:
             args = ['claude', '-p', '--no-session-persistence', '--model', a.model, '--output-format', 'json',
                     '--permission-mode', 'plan' if a.mode == 'reviewer' else 'acceptEdits']
@@ -289,7 +289,7 @@ def run(a, evidence):
                     args.append('--verbose')
                     transcript = a.result_file.with_name(a.result_file.stem + '.transcript.jsonl')
             # Permission modes retain host/tool restrictions; no bypass flags. Never --fallback-model.
-            result = subprocess.run(args, input=prompt, text=True, stdout=subprocess.PIPE, env=env)
+            result = subprocess.run(args, input=prompt, text=True, stdout=subprocess.PIPE, env=env, encoding='utf-8')
             if transcript is not None:
                 fd = os.open(transcript, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
                 with os.fdopen(fd, 'w', encoding='utf-8') as stream:

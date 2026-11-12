@@ -19,7 +19,7 @@ function render() {
     identity.append(text('strong', t.id), text('small', t.title));
     row.append(identity, text('td', t.state, 'state'), text('td', t.head ? t.head.slice(0, 12) : 'Pending', 'mono'),
       text('td', `${t.risk || 'Not configured'}${t.human_required ? (t.human_reviewer ? ` · Approved by ${t.human_reviewer}` : ' · Human required') : ''}`),
-      text('td', `${t.attempts} / 3`), text('td', t.hold_reason ? `HELD: ${t.hold_reason}` : t.error || '—'));
+      text('td', `${t.attempts} / ${t.maximum_attempts ?? '?'}`), text('td', t.hold_reason ? `HELD: ${t.hold_reason}` : t.error || '—'));
     return row;
   }));
   if (!rows.length) {

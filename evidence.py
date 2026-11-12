@@ -7,6 +7,8 @@ import shutil
 import subprocess
 import time
 import review_policy
+from check_paths import referenced_paths
+from path_safety import checked_path
 from skill_inventory import skill_files
 from egm import validate_handoff
 from verification_policy import validate_policy, validate_evidence
@@ -16,14 +18,18 @@ from runtime import FactoryError, changed_entries, command, config, config_hash,
 
 
 def sha_file(path):
-    path = Path(path)
-    if path.is_symlink() or not path.is_file():
+    try:
+        path = checked_path(path)
+    except ValueError as exc:
+        raise FactoryError(str(exc)) from exc
+    if not path.is_file():
         raise FactoryError('Missing or symlinked evidence: ' + str(path))
     h = hashlib.sha256()
     with path.open('rb') as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b''):
             h.update(chunk)
     return h.hexdigest()
+
 
 
 def toolchain_identity(c):
@@ -94,7 +100,7 @@ def cold_checks(checkout, logs, c, ticket, base, head, checks):
     if dirty(checkout) or git(checkout, 'rev-parse', 'HEAD') != head:
         raise FactoryError('Cold verification changed candidate')
     evidence['digest'] = config_hash(evidence)
-    (logs / 'manifest.json').write_text(json.dumps(evidence, indent=2))
+    (logs / 'manifest.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
     return evidence
 
 
@@ -113,6 +119,8 @@ def negative_control(source, logs, c, base, head, check, passing, artifacts):
         artifacts[str(log)] = sha_file(log)
     if dirty(checkout) or git(checkout, 'rev-parse', 'HEAD') != head:
         raise FactoryError('Negative-control preflight changed candidate')
+    tracked = set(git(checkout, 'ls-tree', '-r', '--name-only', '-z', head).split('\0'))
+    check_inputs = referenced_paths(c, checkout, tracked - {''}, source)
     mutation = check['negative_control']
     mutation_log = logs / (check['id'] + '-mutation.log')
     mutation_argv = command(mutation, {'worktree': checkout})
@@ -121,14 +129,18 @@ def negative_control(source, logs, c, base, head, check, passing, artifacts):
     if not paths or git(checkout, 'rev-parse', 'HEAD') != head:
         raise FactoryError('Negative control must modify production files without changing HEAD')
     for path in paths:
+        if any(p == '.' or within(path, p) for p in check_inputs):
+            raise FactoryError('Negative control changed a configured check input: ' + path)
         is_test, is_config = verification_sensitive(path)
         if protected(path) or is_test or is_config or any(within(path, p) for p in c.get('protected_paths', [])):
             raise FactoryError('Negative control changed a test or protected input: ' + path)
     refuse_links(checkout, head)
     for path in paths:
         target = checkout / path
-        if any(p.is_symlink() for p in (target, *target.parents)):
-            raise FactoryError('Negative control introduced a symlink')
+        try:
+            checked_path(target, root=checkout)
+        except ValueError as exc:
+            raise FactoryError('Negative control introduced an unsafe path') from exc
     diff = logs / (check['id'] + '-mutation.diff')
     diff.write_bytes(subprocess.check_output(['git', '-C', str(checkout), 'diff', '--binary', head], timeout=60))
     # Retain untracked additions/deletions as well as the tracked patch.
@@ -235,16 +247,23 @@ def verification_sensitive(path):
     return test, config_file
 
 
-def guard_verification_inputs(repo, ticket, base, head, c):
+def guard_verification_inputs(repo, ticket, base, head, c, source_repo=None):
     """Existing tests and runners require a separate policy-maintenance workflow.
 
     This is regression resistance, not protection from a malicious OS peer.
     """
+    tracked = set(git(repo, 'ls-tree', '-r', '--name-only', '-z', base).split('\0'))
+    tracked.update(git(repo, 'ls-tree', '-r', '--name-only', '-z', head).split('\0'))
+    tracked.discard('')
+    check_paths = referenced_paths(c, repo, tracked, source_repo)
     for status, path in changed_entries(repo, base, head):
+        if any(p == '.' or within(path, p) for p in check_paths):
+            raise FactoryError('Configured check input requires separate policy review: ' + path)
         test, config_file = verification_sensitive(path)
         if config_file or (test and status != 'A') or any(within(path, p) for p in c.get('protected_paths', [])):
             raise FactoryError('Verification-sensitive change requires separate policy review: ' + path)
     refuse_links(repo, head)
+
 
 
 def verify_candidate(repo, c, row, require_pass=True, require_approval=True):
@@ -260,6 +279,7 @@ def verify_candidate(repo, c, row, require_pass=True, require_approval=True):
     if (require_pass and review.get('verdict') != 'PASS') or review.get('reviewed_head') != head or review.get('base') != base:
         raise FactoryError('Review does not match candidate')
     ticket = json.loads(row['ticket'])
+    guard_verification_inputs(work, ticket, base, head, c, source_repo=repo)
     files = diff_paths(work, base, head)
     policy = c.get('review_policy', {})
     if set(review.get('lenses', {})) != set(review_policy.lenses(policy, files)):
@@ -278,7 +298,7 @@ def verify_candidate(repo, c, row, require_pass=True, require_approval=True):
         if artifact:
             if sha_file(artifact['file']) != artifact['sha256']:
                 raise FactoryError('Review result artifact changed')
-            raw = json.loads(Path(artifact['file']).read_text())
+            raw = json.loads(Path(artifact['file']).read_text(encoding='utf-8'))
             if raw != {k: v for k, v in r.items() if k not in ('artifact', 'evidence', 'routing')}:
                 raise FactoryError('Review differs from original result artifact')
         elif c.get('repair_policy') is not None:

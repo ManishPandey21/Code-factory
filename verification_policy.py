@@ -10,8 +10,10 @@ No exit-code-only command can satisfy the evidence contract.
 from __future__ import annotations
 
 import json
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 import re
+
+from path_safety import checked_path
 
 
 class PolicyError(ValueError):
@@ -162,10 +164,10 @@ def validate_evidence(report_path, check, expect_failure=False):
     inconsistent, malformed or symlinked report never counts as verification.
     The caller must ensure a unique path or remove stale output before execution.
     """
-    path = Path(report_path).absolute()
-    for part in (path, *path.parents):
-        if part.is_symlink():
-            raise PolicyError('Evidence path may not contain symlinks')
+    try:
+        path = checked_path(report_path)
+    except ValueError as exc:
+        raise PolicyError(str(exc)) from exc
     if not path.is_file():
         raise PolicyError('Evidence report is missing or is not a regular file')
     if path.stat().st_size > 1024 * 1024:

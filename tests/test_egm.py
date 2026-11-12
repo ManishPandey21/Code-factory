@@ -21,8 +21,8 @@ class HandoffTests(unittest.TestCase):
         self.env = dict(os.environ, GIT_AUTHOR_NAME='test', GIT_AUTHOR_EMAIL='t@example.invalid',
                         GIT_COMMITTER_NAME='test', GIT_COMMITTER_EMAIL='t@example.invalid')
         self.git('init', '-q', '-b', 'main')
-        (self.repo / 'design.md').write_text('Approved design with an implementation plan')
-        (self.repo / 'review.md').write_text('Five stages reviewed; findings resolved')
+        (self.repo / 'design.md').write_text('Approved design with an implementation plan', encoding='utf-8')
+        (self.repo / 'review.md').write_text('Five stages reviewed; findings resolved', encoding='utf-8')
         self.commit()
         self.ticket = {'id': 'A', 'description': 'Approved work'}
         self.ticket['egm'] = {'schema': 1, 'ticket_sha256': egm.ticket_digest(self.ticket),
@@ -39,12 +39,12 @@ class HandoffTests(unittest.TestCase):
 
     def test_malformed_ticket_cli_has_concise_error(self):
         ticket = self.repo / 'bad-ticket.json'
-        ticket.write_text('{"id": "bad id"}')
+        ticket.write_text('{"id": "bad id"}', encoding='utf-8')
         p = subprocess.run([sys.executable, str(Path(egm.__file__)), '--repo', str(self.repo),
                             '--ticket', str(ticket), '--design', 'design.md',
                             '--report', 'initial_zoom_out=review.md', '--approved-by', 'fixture',
                             '--approval-note', 'fixture', '--output', str(self.repo / 'out.json')],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(p.returncode, 2)
         self.assertIn('egm: Ticket id', p.stderr)
         self.assertNotIn('Traceback', p.stderr)
@@ -63,14 +63,14 @@ class HandoffTests(unittest.TestCase):
     def test_modified_artifacts_rejected_before_and_after_commit(self):
         for name in ('design.md', 'review.md'):
             with self.subTest(artifact=name):
-                old = (self.repo / name).read_text()
-                (self.repo / name).write_text('Changed')
+                old = (self.repo / name).read_text(encoding='utf-8')
+                (self.repo / name).write_text('Changed', encoding='utf-8')
                 with self.assertRaises(ValueError):
                     egm.validate_handoff(self.repo, self.ticket, True)
                 self.commit()
                 with self.assertRaises(ValueError):
                     egm.validate_handoff(self.repo, self.ticket, True)
-                (self.repo / name).write_text(old); self.commit()
+                (self.repo / name).write_text(old, encoding='utf-8'); self.commit()
 
     def test_missing_stage_and_approval_fail_closed(self):
         for key in ('reports', 'approval'):
@@ -80,8 +80,8 @@ class HandoffTests(unittest.TestCase):
                 egm.validate_handoff(self.repo, ticket, True)
 
     def test_unsafe_untracked_and_empty_artifacts(self):
-        (self.repo / 'untracked.md').write_text('not committed')
-        (self.repo / 'empty.md').write_text('')
+        (self.repo / 'untracked.md').write_text('not committed', encoding='utf-8')
+        (self.repo / 'empty.md').write_text('', encoding='utf-8')
         for path in ('../escape', '/etc/passwd', '.git/config', 'untracked.md', 'empty.md'):
             with self.subTest(path=path), self.assertRaises(ValueError):
                 egm.artifact(self.repo, path)
@@ -101,16 +101,16 @@ class FactoryEGMTests(unittest.TestCase):
     states = FactoryTests.states
 
     def test_handoff_cli_to_ready_and_stale_status(self):
-        c = json.loads(self.cfg.read_text()); c['workflow'] = 'egm'
-        self.cfg.write_text(json.dumps(c))
-        (self.repo / 'design.md').write_text('Implement A.py returning value 42')
-        (self.repo / 'review.md').write_text('Fixture report covering all five stages')
+        c = json.loads(self.cfg.read_text(encoding='utf-8')); c['workflow'] = 'egm'
+        self.cfg.write_text(json.dumps(c), encoding='utf-8')
+        (self.repo / 'design.md').write_text('Implement A.py returning value 42', encoding='utf-8')
+        (self.repo / 'review.md').write_text('Fixture report covering all five stages', encoding='utf-8')
         self.commit()
         t = {'id': 'A', 'title': 'Implement fixture', 'description': 'Create A.py',
              'acceptance': ['File contains value 42'], 'paths': ['A.py'], 'depends_on': [], 'role': 'backend',
              'spec': {k: {'impact': 'Fixture', 'acceptance': ['Contract holds']}
                       for k in ('ui', 'api', 'data', 'cross_cutting')}}
-        raw = self.home / 'raw.json'; raw.write_text(json.dumps(t))
+        raw = self.home / 'raw.json'; raw.write_text(json.dumps(t), encoding='utf-8')
         output = self.home / 'bound.json'
         self.cli('add', '--ticket', str(raw), code=2)
         cmd = [sys.executable, str(Path(egm.__file__)), '--repo', str(self.repo), '--ticket', str(raw),
@@ -118,7 +118,7 @@ class FactoryEGMTests(unittest.TestCase):
                '--output', str(output)]
         for stage in egm.STAGES:
             cmd += ['--report', stage + '=review.md']
-        p = subprocess.run(cmd, capture_output=True, text=True)
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertNotEqual(subprocess.run(cmd, capture_output=True).returncode, 0)
         self.cli('add', '--ticket', str(output))
@@ -128,11 +128,11 @@ class FactoryEGMTests(unittest.TestCase):
         self.assertTrue(row['verification_current'])
         logs = self.repo / '.git/infra-factory/logs' / Path(row['worktree']).name
         for lens in ('standards', 'spec'):
-            prompt = (logs / f'review-{lens}-prompt.txt').read_text()
+            prompt = (logs / f'review-{lens}-prompt.txt').read_text(encoding='utf-8')
             self.assertIn('independently read design.md', prompt)
             self.assertIn('omitted from the ticket summary', prompt)
             self.assertIn('Do not read EGM review reports', prompt)
-        (self.repo / 'design.md').write_text('Changed after review')
+        (self.repo / 'design.md').write_text('Changed after review', encoding='utf-8')
         self.assertFalse(self.states()['A']['verification_current'])
         self.cli('publish', '--ticket', 'A', code=2)
 

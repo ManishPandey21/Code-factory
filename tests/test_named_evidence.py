@@ -18,23 +18,23 @@ class NamedEvidenceTests(unittest.TestCase):
         self.path = Path(tmp.name) / 'report'
 
     def test_names_survive_native_normalization(self):
-        self.path.write_text('<testsuite name="api"><testcase classname="Login" name="rejects_bad_password"/></testsuite>')
+        self.path.write_text('<testsuite name="api"><testcase classname="Login" name="rejects_bad_password"/></testsuite>', encoding='utf-8')
         data = parse_junit(self.path)
         self.assertEqual(data['tests'], [{'id': '["api","Login","rejects_bad_password"]', 'status': 'passed'}])
 
     def test_unnamed_and_duplicate_tests_rejected(self):
         for cases in ['<testcase/>', '<testcase name="same"/><testcase name="same"/>']:
-            self.path.write_text('<testsuite>' + cases + '</testsuite>')
+            self.path.write_text('<testsuite>' + cases + '</testsuite>', encoding='utf-8')
             with self.assertRaises(ReportError): parse_junit(self.path)
 
     def test_headcounts_alone_rejected(self):
-        self.path.write_text(json.dumps(dict(status='passed', total=1, passed=1, failed=0, skipped=0)))
+        self.path.write_text(json.dumps(dict(status='passed', total=1, passed=1, failed=0, skipped=0)), encoding='utf-8')
         with self.assertRaises(PolicyError): validate_evidence(self.path, {'min_tests': 1})
 
     def test_negative_control_requires_assertion_failure_not_error(self):
-        self.path.write_text('<testsuite><testcase name="behavior"><failure type="AssertionError"/></testcase></testsuite>')
+        self.path.write_text('<testsuite><testcase name="behavior"><failure type="AssertionError"/></testcase></testsuite>', encoding='utf-8')
         self.assertEqual(parse_junit(self.path, expect_failure=True)['tests'][0]['status'], 'failed')
-        self.path.write_text('<testsuite><testcase name="behavior"><error/></testcase></testsuite>')
+        self.path.write_text('<testsuite><testcase name="behavior"><error/></testcase></testsuite>', encoding='utf-8')
         with self.assertRaises(ReportError): parse_junit(self.path, expect_failure=True)
 
     def test_review_must_cite_observed_test_ids(self):
@@ -57,12 +57,12 @@ class AssertionClassificationTests(unittest.TestCase):
             for attrs in ['type="RuntimeError" message="application crashed"',
                           'message="RuntimeError: crashed"', '',
                           'type="ValueError" message="assert bogus"']:
-                path.write_text('<testsuite><testcase name="test"><failure ' + attrs + '/></testcase></testsuite>')
+                path.write_text('<testsuite><testcase name="test"><failure ' + attrs + '/></testcase></testsuite>', encoding='utf-8')
                 with self.subTest(attrs=attrs), self.assertRaises(ReportError):
                     parse_junit(path, expect_failure=True)
             for attrs in ['type="AssertionError"', 'message="assert 41 == 42"',
                           'message="AssertionError: expected value"']:
-                path.write_text('<testsuite><testcase name="test"><failure ' + attrs + '/></testcase></testsuite>')
+                path.write_text('<testsuite><testcase name="test"><failure ' + attrs + '/></testcase></testsuite>', encoding='utf-8')
                 self.assertEqual(parse_junit(path, expect_failure=True)['failed'], 1)
 
 

@@ -125,7 +125,13 @@ def validate_ticket(t):
     return t
 
 
+UPDATE_FIELDS = frozenset({'branch', 'worktree', 'base_sha', 'head_sha', 'review_json', 'error',
+                           'owner_pid', 'owner_host', 'config_hash', 'checks_json', 'pr_url', 'attempts'})
+
+
 def update(home, ticket_id, state, repair_request=None, **kwargs):
+    if set(kwargs) - UPDATE_FIELDS:
+        raise FactoryError('Unknown ticket update column')
     values = {'state': state, 'updated': time.time(), **kwargs}
     with connect(home) as con:
         if repair_request is not None:
@@ -137,6 +143,7 @@ def update(home, ticket_id, state, repair_request=None, **kwargs):
             record(con, ticket_id, state, {'action': 'repair', **repair_request})
         con.execute('UPDATE tickets SET ' + ','.join(f'{k}=?' for k in values) + ' WHERE id=?', [*values.values(), ticket_id])
         record(con, ticket_id, state, kwargs)
+
 
 
 

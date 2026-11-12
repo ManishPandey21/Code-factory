@@ -1,6 +1,5 @@
 """Bounded explicit repairs using controller reviews or allowlisted GitHub CI."""
 import json
-from pathlib import Path
 import re
 import subprocess
 import time
@@ -29,7 +28,63 @@ def api(path):
         raise ValueError('GitHub API request failed; no repair started')
     if len(result.stdout) > 4 * 1024 * 1024:
         raise ValueError('GitHub response exceeds repair evidence limit')
-    return json.loads(result.stdout)
+    try:
+        data = json.loads(result.stdout.decode('utf-8'))
+    except (UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError('GitHub API returned invalid UTF-8 JSON; no repair started') from exc
+    return require_object(data, 'API response')
+
+
+def require_object(value, label):
+    if not isinstance(value, dict):
+        raise ValueError('Malformed GitHub ' + label + ': expected an object')
+    return value
+
+
+def require_text(obj, key, label):
+    value = obj.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError('Malformed GitHub ' + label + ': expected nonempty ' + key)
+    return value
+
+
+def require_integer(obj, key, label):
+    value = obj.get(key)
+    if type(value) is not int or value <= 0:
+        raise ValueError('Malformed GitHub ' + label + ': expected positive integer ' + key)
+    return value
+
+
+def validate_run(value):
+    run = require_object(value, 'run')
+    for key in ('id', 'workflow_id', 'run_attempt'):
+        require_integer(run, key, 'run')
+    for key in ('head_sha', 'event', 'status', 'conclusion', 'updated_at'):
+        require_text(run, key, 'run')
+    for key in ('repository', 'head_repository'):
+        require_text(require_object(run.get(key), key), 'full_name', key)
+    return run
+
+
+def validate_jobs(value):
+    response = require_object(value, 'jobs response')
+    batch = response.get('jobs')
+    if not isinstance(batch, list) or len(batch) > 100:
+        raise ValueError('Malformed GitHub jobs response: expected at most 100 jobs')
+    for item in batch:
+        job = require_object(item, 'job')
+        for key in ('run_id', 'run_attempt'):
+            require_integer(job, key, 'job')
+        for key in ('head_sha', 'status', 'conclusion', 'name'):
+            require_text(job, key, 'job')
+        steps = job.get('steps')
+        if not isinstance(steps, list):
+            raise ValueError('Malformed GitHub job: expected steps array')
+        for item in steps:
+            step = require_object(item, 'step')
+            for key in ('name', 'conclusion'):
+                require_text(step, key, 'step')
+    return batch
 
 
 def github_findings(policy, run_id, head, fetch=api):
@@ -37,7 +92,7 @@ def github_findings(policy, run_id, head, fetch=api):
         raise ValueError('GitHub repair needs a positive --run-id')
     repo = policy['repository']
     path = f'repos/{repo}/actions/runs/{run_id}'
-    run = fetch(path)
+    run = validate_run(fetch(path))
     def identity(r):
         return {k: r.get(k) for k in ('id', 'head_sha', 'workflow_id', 'repository', 'head_repository',
                                     'event', 'status', 'conclusion', 'run_attempt', 'updated_at')}
@@ -52,9 +107,7 @@ def github_findings(policy, run_id, head, fetch=api):
     jobs, pages = [], []
     for page in range(1, 11):
         response = fetch(path + f"/attempts/{run['run_attempt']}/jobs?per_page=100&page={page}")
-        batch = response.get('jobs')
-        if not isinstance(batch, list):
-            raise ValueError('Malformed CI jobs response')
+        batch = validate_jobs(response)
         pages.append(response)
         for job in batch:
             if (job.get('head_sha') != head or job.get('run_id') != run_id or
@@ -68,7 +121,7 @@ def github_findings(policy, run_id, head, fetch=api):
             break
     else:
         raise ValueError('CI run exceeds bounded job pagination')
-    if not jobs or identity(fetch(path)) != identity(run):
+    if not jobs or identity(validate_run(fetch(path))) != identity(run):
         raise ValueError('CI run changed while fetching, or has no failed jobs')
     return {'source': 'github', 'head': head, 'repository': repo, 'run_id': run_id,
             'run_attempt': run['run_attempt'], 'workflow_id': run['workflow_id'], 'findings': jobs}, {'run': run, 'pages': pages}
@@ -136,7 +189,7 @@ def repair_candidate(f, repo, home, c, args):
         raise ValueError('Configuration changed during repair preflight')
     receipt = home / 'logs' / ('repair-' + str(time.time_ns()) + '.json')
     receipt.parent.mkdir(exist_ok=True)
-    receipt.write_text(json.dumps({'evidence': evidence, 'github': raw}, indent=2))
+    receipt.write_text(json.dumps({'evidence': evidence, 'github': raw}, indent=2), encoding='utf-8')
     request = {'head': args.head, 'source': args.source, 'receipt': str(receipt), 'sha256': f.sha_file(receipt)}
     # Claim, event and attempt transition commit atomically inside execute_ticket.
     # A crash before that transition leaves no consumed candidate; after it the

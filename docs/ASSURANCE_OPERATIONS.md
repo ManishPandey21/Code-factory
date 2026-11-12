@@ -123,7 +123,7 @@ python factory.py dashboard --repo /path/to/project --port 8765
 ```
 
 Open `http://127.0.0.1:8765`. The dashboard shows tickets, candidate SHAs, attempts,
-recorded risk/approval, holds and an event stream. Search by ticket, state or title.
+recorded risk/approval, holds and an event stream. The attempt denominator is the current configured limit; `?` means configuration is unavailable. Search by ticket, state or title.
 It polls every two seconds and retains the latest 1,000 events in the browser.
 The API returns consistent read-only SQLite snapshots with monotonically ordered
 cursors and up to 500 events per page. Follow the returned cursor/has_more fields

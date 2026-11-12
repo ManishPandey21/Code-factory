@@ -39,8 +39,8 @@ class TransientError(FactoryError):
 def git(repo, *args):
     p = subprocess.run(['git', '-C', str(repo), *args], capture_output=True, timeout=60)
     if p.returncode:
-        raise FactoryError(p.stderr.decode(errors='replace').strip())
-    return p.stdout.decode(errors='surrogateescape').strip()
+        raise FactoryError(p.stderr.decode(errors='replace', encoding='utf-8').strip())
+    return p.stdout.decode(errors='surrogateescape', encoding='utf-8').strip()
 
 
 def locations(repo):
@@ -62,7 +62,7 @@ def default_config(repo):
 
 
 def config_hash(c):
-    return hashlib.sha256(json.dumps(c, sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(c, sort_keys=True).encode(encoding='utf-8')).hexdigest()
 
 
 def alive(pid):
@@ -109,7 +109,7 @@ def lock(home, filename='coordinator.lock'):
         raise FactoryError(f'{filename} exists; no automatic lock stealing. After verifying its owner exited, use '
                            'recover --ticket ID for a stale RUNNING/REVIEWING ticket, or unlock when no ticket is in flight.')
     try:
-        with os.fdopen(fd, 'w') as f:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump({'pid': os.getpid(), 'host': socket.gethostname()}, f)
             f.flush()
             os.fsync(f.fileno())
@@ -119,7 +119,7 @@ def lock(home, filename='coordinator.lock'):
 
 
 def config(repo):
-    c = json.loads((repo / '.infra-factory/config.json').read_text())
+    c = json.loads((repo / '.infra-factory/config.json').read_text(encoding='utf-8'))
     if not isinstance(c, dict) or c.get('version') != 1 or not isinstance(c.get('base_ref'), str):
         raise FactoryError('Invalid config version/base_ref')
     if not isinstance(c.get('timeout_seconds'), (int, float)) or c['timeout_seconds'] <= 0:
@@ -212,7 +212,7 @@ def assert_committed_scope(repo, ticket, base, head):
 def dirty(repo, allow_config=False):
     # Porcelain -z avoids ambiguity from spaces, quotes and newlines in filenames.
     raw = subprocess.check_output(['git', '-C', str(repo), 'status', '--porcelain=v1', '-z', '--untracked-files=all'], timeout=60)
-    fields = raw.decode(errors='surrogateescape').split('\0')
+    fields = raw.decode(errors='surrogateescape', encoding='utf-8').split('\0')
     paths = []
     i = 0
     while i < len(fields):
@@ -286,7 +286,7 @@ def invoke(args, cwd, log, timeout, prompt=None, env=None, split_stderr=False):
         try:
             if STOP.is_set():
                 kill_tree(p)
-            p.communicate(prompt.encode() if prompt is not None else None, timeout=timeout)
+            p.communicate(prompt.encode(encoding='utf-8') if prompt is not None else None, timeout=timeout)
         except BaseException:
             kill_tree(p)
             p.wait()
@@ -300,7 +300,7 @@ def invoke(args, cwd, log, timeout, prompt=None, env=None, split_stderr=False):
 
 
 def run_agent(spec, wt, prompt_path, result_path, log, timeout, prompt):
-    prompt_path.write_text(prompt)
+    prompt_path.write_text(prompt, encoding='utf-8')
     args = command(spec, {'worktree': wt, 'prompt_file': prompt_path, 'result_file': result_path, 'model': spec.get('model', '')})
     invoke(args, wt, log, timeout, prompt if spec.get('stdin_prompt', False) else None)
 

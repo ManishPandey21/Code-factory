@@ -19,12 +19,12 @@ class ColdWorkspaceTests(unittest.TestCase):
         self.git(self.source, "init", "-q", "-b", "main")
         self.git(self.source, "config", "user.name", "Fixture")
         self.git(self.source, "config", "user.email", "fixture@example.invalid")
-        (self.source / ".gitignore").write_text("private.flag\n")
-        (self.source / "module.py").write_text("value = 1\n")
+        (self.source / ".gitignore").write_text("private.flag\n", encoding='utf-8')
+        (self.source / "module.py").write_text("value = 1\n", encoding='utf-8')
         self.git(self.source, "add", ".")
         self.git(self.source, "commit", "-qm", "base")
         self.base = self.git(self.source, "rev-parse", "HEAD")
-        (self.source / "module.py").write_text("value = 2\n")
+        (self.source / "module.py").write_text("value = 2\n", encoding='utf-8')
         self.git(self.source, "commit", "-qam", "candidate")
         self.head = self.git(self.source, "rev-parse", "HEAD")
 
@@ -33,12 +33,12 @@ class ColdWorkspaceTests(unittest.TestCase):
 
     def git(self, directory, *args):
         return subprocess.check_output(["git", "-C", str(directory), *args],
-                                       text=True, stderr=subprocess.PIPE).strip()
+                                       text=True, stderr=subprocess.PIPE, encoding='utf-8').strip()
 
     def test_checkout_is_exact_independent_and_has_no_builder_artifacts(self):
-        (self.source / "private.flag").write_text("builder state")
-        (self.source / "transcript.txt").write_text("untracked transcript")
-        (self.source / "module.py").write_text("uncommitted builder change")
+        (self.source / "private.flag").write_text("builder state", encoding='utf-8')
+        (self.source / "transcript.txt").write_text("untracked transcript", encoding='utf-8')
+        (self.source / "module.py").write_text("uncommitted builder change", encoding='utf-8')
         destination = clone_candidate(self.source, self.root / "verifier", self.head, self.base)
         self.assertTrue((destination / ".git").is_dir())
         self.assertEqual(self.git(destination, "rev-parse", "HEAD"), self.head)
@@ -47,7 +47,7 @@ class ColdWorkspaceTests(unittest.TestCase):
         self.assertEqual(self.git(destination, "remote"), "")
         self.assertFalse((destination / "private.flag").exists())
         self.assertFalse((destination / "transcript.txt").exists())
-        self.assertEqual((destination / "module.py").read_text(), "value = 2\n")
+        self.assertEqual((destination / "module.py").read_text(encoding='utf-8'), "value = 2\n")
         self.assertFalse((destination / ".git/objects/info/alternates").exists())
         source_inodes = {(p.stat().st_dev, p.stat().st_ino)
                          for p in (self.source / ".git/objects").rglob("*") if p.is_file()}
@@ -60,7 +60,7 @@ class ColdWorkspaceTests(unittest.TestCase):
         hooks.mkdir()
         sentinel = self.root / "hook-ran"
         hook = hooks / "post-checkout"
-        hook.write_text("#!/bin/sh\ntouch '" + str(sentinel) + "'\n")
+        hook.write_text("#!/bin/sh\ntouch '" + str(sentinel) + "'\n", encoding='utf-8')
         hook.chmod(0o755)
         self.git(self.source, "config", "core.hooksPath", str(hooks))
         self.git(self.source, "config", "factory.private", "private-value")
@@ -75,10 +75,10 @@ class ColdWorkspaceTests(unittest.TestCase):
         destination = self.root / "existing"
         destination.mkdir()
         keep = destination / "keep"
-        keep.write_text("user work")
+        keep.write_text("user work", encoding='utf-8')
         with self.assertRaises(ColdWorkspaceError):
             clone_candidate(self.source, destination, self.head, self.base)
-        self.assertEqual(keep.read_text(), "user work")
+        self.assertEqual(keep.read_text(encoding='utf-8'), "user work")
 
     def test_reject_non_ancestor_base(self):
         self.git(self.source, "checkout", "--orphan", "unrelated")
@@ -113,7 +113,7 @@ class ColdWorkspaceTests(unittest.TestCase):
 
     def test_ambient_git_config_cannot_redirect_checkout(self):
         bad_config = self.root / "bad-global"
-        bad_config.write_text("[init]\n templateDir = /nonexistent\n")
+        bad_config.write_text("[init]\n templateDir = /nonexistent\n", encoding='utf-8')
         with patch.dict(os.environ, {"GIT_DIR": "/bad", "GIT_WORK_TREE": "/bad",
                                    "GIT_CONFIG_GLOBAL": str(bad_config)}):
             destination = clone_candidate(self.source, self.root / "verifier", self.head, self.base)

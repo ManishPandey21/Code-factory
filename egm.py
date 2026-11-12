@@ -11,6 +11,8 @@ from pathlib import Path, PurePosixPath
 import subprocess
 import sys
 
+from path_safety import checked_path
+
 STAGES = ('initial_zoom_out', 'comprehension', 'design_critique',
           'intermediate_zoom_out', 'implementation_readiness')
 UPSTREAM = 'https://github.com/google/elephant-goldfish-model'
@@ -23,7 +25,7 @@ def digest(data):
 
 def ticket_digest(ticket):
     return digest(json.dumps({k: v for k, v in ticket.items() if k != 'egm'},
-                             sort_keys=True, separators=(',', ':')).encode())
+                             sort_keys=True, separators=(',', ':')).encode(encoding='utf-8'))
 
 
 def artifact(repo, path):
@@ -37,8 +39,8 @@ def artifact(repo, path):
     if any(part in {'.git', '.infra-factory'} for part in rel.parts):
         raise ValueError('EGM artifacts must be project documents')
     repo = Path(repo).resolve()
-    target = repo / path
-    if any(p.is_symlink() for p in (target, *target.parents)) or not target.is_file():
+    target = checked_path(repo / path, root=repo)
+    if not target.is_file():
         raise ValueError('EGM artifact must be a regular file without symlinks: ' + path)
     raw = target.read_bytes()
     if not raw.strip():
@@ -84,7 +86,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     from factory import FactoryError, validate_ticket
     try:
-        ticket = validate_ticket(json.loads(a.ticket.read_text()))
+        ticket = validate_ticket(json.loads(a.ticket.read_text(encoding='utf-8')))
     except FactoryError as exc:
         raise ValueError(str(exc)) from exc
     reports = {}

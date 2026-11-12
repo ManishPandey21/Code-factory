@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 import review_policy
+from runtime_requirements import require_git_version
 from ticket_controls import control, require_unheld, change_control
 from skill_inventory import helper_prompt
 from egm import validate_handoff
@@ -40,7 +41,6 @@ def publish(repo, home, c, ticket_id, execute):
     checks = json.loads(row['checks_json'])
     head, base, branch = row['head_sha'], row['base_sha'], row['branch']
     work = Path(row['worktree'])
-    ticket = json.loads(row['ticket'])
     print(json.dumps({'dry_run': not execute, 'ticket': ticket_id, 'head': head, 'base': base, 'branch': branch, 'draft': True,
                       'source_issue': source_issue['url'] if source_issue else None}), flush=True)
     if not execute:
@@ -59,7 +59,7 @@ def publish(repo, home, c, ticket_id, execute):
             output = logs / ('remote-base-' + label + '.txt')
             remote_ref = c['base_ref'] if c['base_ref'].startswith('refs/heads/') else 'refs/heads/' + c['base_ref']
             remote(['git', 'ls-remote', '--exit-code', 'origin', remote_ref], output)
-            lines = output.read_text().splitlines()
+            lines = output.read_text(encoding='utf-8').splitlines()
             expected = base + '\t' + remote_ref
             if lines != [expected]:
                 raise FactoryError('Origin base differs from reviewed base; fresh checks/review required')
@@ -76,7 +76,7 @@ def publish(repo, home, c, ticket_id, execute):
             output = logs / filename
             remote(['gh', 'pr', 'list', '--state', 'open', '--head', branch, '--base', c['base_ref'],
                     '--json', 'url,isDraft,headRefOid', *gh_repository], output)
-            results = json.loads(output.read_text())
+            results = json.loads(output.read_text(encoding='utf-8'))
             if source_issue and (not isinstance(results, list) or any(
                     not isinstance(pr, dict) or not isinstance(pr.get('url'), str) or
                     not re.fullmatch(r'https://github\.com/' + re.escape(source_issue['repository']) +
@@ -95,7 +95,7 @@ def publish(repo, home, c, ticket_id, execute):
                             'LOCAL verification only: independently executed policy-selected tests and every policy-selected cold review passed on this exact commit.\n\n'
                             'Evidence digests: ' + ', '.join(checks['cold'].values()) + '\n\n'
                             'This draft requires human review and merge. No automatic merge is enabled.\n' +
-                            ('\nRefs ' + source_issue['url'] + '\n' if source_issue else ''))
+                            ('\nRefs ' + source_issue['url'] + '\n' if source_issue else ''), encoding='utf-8')
             remote(['gh', 'pr', 'create', '--draft', '--base', c['base_ref'], '--head', branch,
                     '--title', (ticket_id + ': ' + t['title']).replace('\n', ' ')[:200], '--body-file', str(body), *gh_repository],
                    logs / 'pr-create.log')
@@ -160,6 +160,7 @@ def main(argv=None):
         if name == 'run':
             p.add_argument('--limit', type=int, default=2)
     args = parser.parse_args(argv)
+    require_git_version()
     repo, home = locations(args.repo)
     from usage_trace import traced
     return traced(home, args, lambda: dispatch_command(args, repo, home))
@@ -176,7 +177,7 @@ def dispatch_command(args, repo, home):
         with lock(home):
             cfg.parent.mkdir(exist_ok=True)
             if not cfg.exists():
-                with cfg.open('x') as f:
+                with cfg.open('x', encoding='utf-8') as f:
                     json.dump(default_config(repo), f, indent=2)
             initialize_db(home)
         print('Initialized; configure nonempty checks and authenticated CLI commands before execution.')
@@ -187,9 +188,9 @@ def dispatch_command(args, repo, home):
     if args.action in ('events', 'dashboard'):
         from ledger_view import serve, events
         if args.action == 'dashboard':
-            serve(home, args.port)
+            serve(home, args.port, repo=repo)
         else:
-            events(home, args.after, args.limit, args.follow)
+            events(home, args.after, args.limit, args.follow, repo=repo)
         return 0
     if args.action in ('hold', 'release'):
         with lock(home), connect(home) as con:
@@ -237,7 +238,7 @@ def dispatch_command(args, repo, home):
                 print('No coordinator lock is present.')
                 return 0
             try:
-                owner = json.loads(target.read_text())
+                owner = json.loads(target.read_text(encoding='utf-8'))
             except ValueError:
                 owner = None
             if (not isinstance(owner, dict) or owner.get('host') != socket.gethostname()
@@ -261,7 +262,7 @@ def dispatch_command(args, repo, home):
                 raise FactoryError('Ticket owner is alive or unknown; refusing recovery')
             target = home / 'coordinator.lock'
             if target.exists():
-                owner = json.loads(target.read_text())
+                owner = json.loads(target.read_text(encoding='utf-8'))
                 if owner.get('host') != socket.gethostname() or alive(owner.get('pid')):
                     raise FactoryError('Lock owner is alive or cannot be verified local; refusing recovery')
                 target.unlink()
@@ -334,7 +335,7 @@ def dispatch_command(args, repo, home):
                         update(home, args.ticket, 'BLOCKED', error='Publication eligibility revoked: ' + str(exc))
                 raise
         if args.action == 'add':
-            t = validate_ticket(json.loads(Path(args.ticket).read_text()))
+            t = validate_ticket(json.loads(Path(args.ticket).read_text(encoding='utf-8')))
             validate_handoff(repo, t, required=c.get('workflow') == 'egm')
             with connect(home) as con:
                 reply = add_ticket(con, c, t, idempotent=args.idempotent)

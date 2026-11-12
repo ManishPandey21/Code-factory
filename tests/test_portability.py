@@ -16,7 +16,7 @@ class PortableConfigurationTests(unittest.TestCase):
     def configure(self, *args):
         return subprocess.run([sys.executable, str(ROOT / 'configure.py'),
                                '--repo', str(self.repo), '--tdd-skill', str(self.skill), *args],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, encoding='utf-8')
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -25,9 +25,9 @@ class PortableConfigurationTests(unittest.TestCase):
         (self.repo / '.infra-factory').mkdir()
         self.path = self.repo / '.infra-factory/config.json'
         self.original = json.dumps({'version': 1, 'commands': {}, 'checks': [['python', '-V']]})
-        self.path.write_text(self.original)
+        self.path.write_text(self.original, encoding='utf-8')
         self.skill = self.repo / 'SKILL.md'
-        self.skill.write_text('Local TDD instructions')
+        self.skill.write_text('Local TDD instructions', encoding='utf-8')
 
     def test_provider_profiles_and_preview_preserve_checks(self):
         for provider, model in [('claude', 'claude-test-1'), ('codex', 'test-model-1')]:
@@ -38,7 +38,7 @@ class PortableConfigurationTests(unittest.TestCase):
                 self.assertEqual(config['checks'], [['python', '-V']])
                 self.assertTrue(all(c['provider'] == provider and c['model'] == model
                                     for c in config['commands'].values()))
-                self.assertEqual(self.path.read_text(), self.original)
+                self.assertEqual(self.path.read_text(encoding='utf-8'), self.original)
 
     def test_policy_roles_use_fresh_reviewer_bridge_for_both_providers(self):
         for provider, model in [('claude', 'claude-test-1'), ('codex', 'test-model-1')]:
@@ -64,9 +64,9 @@ class PortableConfigurationTests(unittest.TestCase):
                 'reviewer_spec=claude:claude-test-1:high', '--apply')
         p = self.configure(*args)
         self.assertEqual(p.returncode, 0, p.stderr)
-        config = json.loads(self.path.read_text())
+        config = json.loads(self.path.read_text(encoding='utf-8'))
         self.assertEqual(config['commands']['reviewer_spec']['provider'], 'claude')
-        self.assertEqual(self.path.with_suffix('.json.before-cli-config').read_text(), self.original)
+        self.assertEqual(self.path.with_suffix('.json.before-cli-config').read_text(encoding='utf-8'), self.original)
         self.assertNotEqual(self.configure(*args).returncode, 0)
 
 
@@ -83,10 +83,10 @@ class RoutingIdentityTests(unittest.TestCase):
             for key, wrong in [('provider', 'claude'), ('requested_model', 'other'),
                                ('requested_effort', 'low'), ('schema', 999), ('exit_code', 1)]:
                 with self.subTest(field=key):
-                    receipt.write_text(json.dumps(dict(correct, **{key: wrong})))
+                    receipt.write_text(json.dumps(dict(correct, **{key: wrong})), encoding='utf-8')
                     with self.assertRaises(factory.FactoryError):
                         factory.routing_evidence(result, spec)
-            receipt.write_text(json.dumps(correct))
+            receipt.write_text(json.dumps(correct), encoding='utf-8')
             result = factory.routing_evidence(result, spec)
             self.assertIs(result['served_models_verified'], False)
 

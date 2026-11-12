@@ -38,9 +38,9 @@ class NegativeControlTests(unittest.TestCase):
     states = fixtures.FactoryTests.states
 
     def configure_probe(self, mutation="Path('A.py').write_text('value = 41\\n')"):
-        runner = self.home / 'native_runner.py'; runner.write_text(RUNNER)
-        (self.repo / '.gitignore').write_text('.test-output/\n')
-        config = json.loads(self.cfg.read_text())
+        runner = self.home / 'native_runner.py'; runner.write_text(RUNNER, encoding='utf-8')
+        (self.repo / '.gitignore').write_text('.test-output/\n', encoding='utf-8')
+        config = json.loads(self.cfg.read_text(encoding='utf-8'))
         # One genuine behavior probe is sufficient to exercise the transport;
         # other check categories retain their explicit orchestration fixtures.
         check = config['verification']['checks'][0]
@@ -49,18 +49,18 @@ class NegativeControlTests(unittest.TestCase):
                          '--', sys.executable, str(runner)]
         check['negative_control'] = {'argv': [sys.executable, '-c', 'from pathlib import Path; ' + mutation],
                                      'expected_failures': [TEST_ID]}
-        self.cfg.write_text(json.dumps(config)); self.commit()
+        self.cfg.write_text(json.dumps(config), encoding='utf-8'); self.commit()
         self.add('A')
 
     def test_real_assertion_fails_on_mutation_and_original_stays_green(self):
         self.configure_probe(); self.cli('run', '--execute')
         row = self.states()['A']; self.assertEqual(row['state'], 'READY')
-        self.assertEqual((Path(row['worktree']) / 'A.py').read_text(), 'value = 42\n')
+        self.assertEqual((Path(row['worktree']) / 'A.py').read_text(encoding='utf-8'), 'value = 42\n')
         check = row['review_json']['lenses']['spec']['evidence']['checks'][0]
         self.assertEqual(check['counts']['tests'], [{'id': TEST_ID, 'status': 'passed'}])
         self.assertEqual(check['negative_control']['counts']['tests'], [{'id': TEST_ID, 'status': 'failed'}])
         self.cli('publish', '--ticket', 'A')
-        Path(check['negative_control']['diff']).write_text('tampered')
+        Path(check['negative_control']['diff']).write_text('tampered', encoding='utf-8')
         self.assertFalse(self.states()['A']['verification_current'])
         self.cli('publish', '--ticket', 'A', code=2)
 
@@ -87,9 +87,9 @@ class NegativeControlTests(unittest.TestCase):
 
 
     def test_suffix_colliding_check_ids_retain_distinct_artifacts(self):
-        config = json.loads(self.cfg.read_text())
+        config = json.loads(self.cfg.read_text(encoding='utf-8'))
         config['verification']['checks'][1]['id'] = config['verification']['checks'][0]['id'] + '-negative'
-        self.cfg.write_text(json.dumps(config)); self.commit(); self.add('A')
+        self.cfg.write_text(json.dumps(config), encoding='utf-8'); self.commit(); self.add('A')
         self.cli('run', '--execute')
         evidence = self.states()['A']['review_json']['lenses']['spec']['evidence']
         reports = [check['report'] for check in evidence['checks']]
