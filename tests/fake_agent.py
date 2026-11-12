@@ -31,6 +31,8 @@ else:
     evidence = json.loads(prompt.split('COLD_TEST_EVIDENCE\n',1)[1])
     result = {'verdict':verdict,'reviewed_head':head,'base':base,'findings':[], 'evidence_digest':evidence['digest'],
               'tests_confirmed':True,'covered_files':evidence['files'],'acceptance_covered':list(range(len(evidence['acceptance'])))}
+    result['acceptance_tests'] = [{'acceptance': i, 'tests': [{'check': evidence['checks'][0]['id'],
+        'test': evidence['checks'][0]['counts']['tests'][0]['id']}]} for i in range(len(evidence['acceptance']))]
     if 'NO_EVIDENCE' in ticket['title']: result.pop('evidence_digest')
     if 'NO_FILE' in ticket['title']: result['covered_files']=[]
     if 'NO_ACCEPTANCE' in ticket['title']: result['acceptance_covered']=[]

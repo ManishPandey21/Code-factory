@@ -1,5 +1,8 @@
 # Install and migrate to v0.3
 
+For the current named-report schema and mandatory negative controls, also follow
+[NAMED_EVIDENCE.md](NAMED_EVIDENCE.md). The historical steps below remain the base setup.
+
 This is a breaking, fail-closed local hardening candidate. Preserve v0.2 evidence; do not copy old READY receipts into new runs. Existing v0.2 queued tickets need the new spec fields. A v0.2 config's empty verification policy is not eligible. Do not alter live ledger records to fabricate migration success: use new scoped ticket IDs after setup.
 
 ## Existing application
@@ -40,6 +43,6 @@ Retry requires BLOCKED and fewer than three attempts. Reject applies to inactive
 
 ## Evidence and limits
 
-Per-lens manifest.json includes exact base/head/tree, ticket/config hashes, test command/counts, changed paths, acceptance items, direct tool hashes and SHA256 for the binary diff/logs/reports. No signatures or external trust root are provided. Logs can contain application test data; protect access and configure external retention. Native browser traces/screenshots should be retained by the project's trusted wrapper and verified in CI; the generic JUnit adapter does not certify pixels or capture browser evidence by itself.
+Per-lens manifest.json includes exact base/head/tree, ticket/config hashes, test commands, named passing/failing outcomes, mutation receipts, changed paths, acceptance-to-test mappings, direct tool hashes and SHA256 for the binary diff/logs/reports. No signatures or external trust root are provided. Logs can contain application test data; protect access and configure external retention. Native browser traces/screenshots should be retained by the project's trusted wrapper and verified in CI; the generic JUnit adapter does not certify pixels or capture browser evidence by itself.
 
 Read AUDIT.md before any unattended production use. Automatic merge/deploy and autonomous production rollback remain unsupported.

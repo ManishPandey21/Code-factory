@@ -197,7 +197,7 @@ class AuditRegressions(_base.FactoryTests):
     def test_mixed_lens_verdict_is_not_mislabelled(self):
         sys.path.insert(0, str(ROOT))
         import factory
-        self.assertIn("'INCONCLUSIVE'", Path(factory.__file__).read_text().split('verdicts = {')[1][:260])
+        self.assertIn("'INCONCLUSIVE'", (ROOT / 'dispatch.py').read_text().split('verdicts = {')[1][:260])
 
     def test_sigterm_kills_agents_releases_lock_and_blocks_ticket(self):
         pid_file = self.home / 'builder.pid'; slow = self.home / 'slow.py'

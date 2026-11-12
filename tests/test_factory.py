@@ -27,7 +27,8 @@ class FactoryTests(unittest.TestCase):
         c['checks']=[[sys.executable,'-c','import pathlib; assert pathlib.Path("README.md").exists()']]
         kinds = {'frontend': ['unit','component','visual','e2e'], 'backend': ['unit','api','integration'], 'shared': ['contract']}
         c['verification'] = {'path_domains': {'frontend':['frontend'], 'backend':['backend'], 'shared':['shared']}, 'required': {}, 'checks': [
-            {'id':d+'-'+k,'domains':[d],'kind':k,'argv':[sys.executable,str(ROOT/'tests/fixture_report.py'),'{report}'],'report':d+'-'+k+'.json','min_tests':1}
+            {'id':d+'-'+k,'domains':[d],'kind':k,'argv':[sys.executable,str(ROOT/'tests/fixture_report.py'),'{report}','{test_mode}'],'report':d+'-'+k+'.json','min_tests':1,'negative_control':{'argv':[sys.executable,'-c',
+             "from pathlib import Path; Path('README.md').write_text('BROKEN')"],'expected_failures':['fixture.readme']}}
             for d, ks in kinds.items() for k in ks]}
         c['timeout_seconds']=10
         self.cfg.write_text(json.dumps(c));self.commit()
@@ -74,7 +75,7 @@ class FactoryTests(unittest.TestCase):
         self.cli('publish','--ticket','A','--execute',code=2)
         self.assertEqual(self.states()['A']['state'],'BLOCKED')
     def test_missing_report_blocks(self):
-        c=json.loads(self.cfg.read_text());c['verification']['checks'][0]['argv']=[sys.executable,'-c','pass']
+        c=json.loads(self.cfg.read_text());c['verification']['checks'][0]['argv']=[sys.executable,'-c','pass','{test_mode}']
         self.cfg.write_text(json.dumps(c));self.commit()
         self.add('A');self.cli('run','--execute',code=1)
         self.assertEqual(self.states()['A']['state'],'BLOCKED')

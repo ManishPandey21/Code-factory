@@ -1,0 +1,13 @@
+test_real_cli_commands_are_traced_without_changing_holds_or_cleanliness (test_usage_trace.CLIUsageTests.test_real_cli_commands_are_traced_without_changing_holds_or_cleanliness) ... ok
+test_unknown_ticket_error_and_preview_are_traced (test_usage_trace.CLIUsageTests.test_unknown_ticket_error_and_preview_are_traced) ... ok
+test_concurrent_processes_keep_all_start_and_finish_events (test_usage_trace.UsageTraceTests.test_concurrent_processes_keep_all_start_and_finish_events) ... ok
+test_hard_killed_run_retains_durable_start (test_usage_trace.UsageTraceTests.test_hard_killed_run_retains_durable_start) ... ok
+test_interruption_and_unknown_exception_are_recorded_and_reraised (test_usage_trace.UsageTraceTests.test_interruption_and_unknown_exception_are_recorded_and_reraised) ... ok
+test_preview_is_explicit_and_no_extra_arguments_are_recorded (test_usage_trace.UsageTraceTests.test_preview_is_explicit_and_no_extra_arguments_are_recorded) ... ok
+test_success_failure_and_exception_preserve_results (test_usage_trace.UsageTraceTests.test_success_failure_and_exception_preserve_results) ... ok
+test_tracing_unavailable_cannot_change_success_or_hide_original_error (test_usage_trace.UsageTraceTests.test_tracing_unavailable_cannot_change_success_or_hide_original_error) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 2.409s
+
+OK

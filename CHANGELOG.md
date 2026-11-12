@@ -1,3 +1,14 @@
+# Unreleased
+
+- Record minimal local invocation start/finish events without changing authorization or verification.
+
+- Require named test evidence, acceptance-to-test references, and isolated negative controls.
+- Split the coordinator into records, dispatch, evidence, instructions and shared runtime.
+- Add read-only GitHub Issue intake/linking with atomic, duplicate-safe local provenance.
+- Verify hold/release transaction rollback and heading-matched skill navigation.
+- Add the MIT licence and Linux/macOS/Windows CI for Python 3.10 and 3.14.
+- Breaking: count-only evidence and policies without negative controls require migration; see docs/NAMED_EVIDENCE.md.
+
 # 0.4.2 — durable ticket controls and skill navigation
 
 ## 0.5.0 — Candidate assurance and live operations

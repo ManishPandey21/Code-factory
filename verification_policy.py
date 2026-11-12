@@ -115,8 +115,8 @@ def validate_policy(config, ticket):
         raise PolicyError('verification checks must be a nonempty list')
     ids, reports, selected = set(), set(), []
     for check in checks:
-        if not isinstance(check, dict) or set(check) != {'id', 'domains', 'kind', 'argv', 'report', 'min_tests'}:
-            raise PolicyError('Each check requires id, domains, kind, argv, report and min_tests')
+        if not isinstance(check, dict) or set(check) != {'id', 'domains', 'kind', 'argv', 'report', 'min_tests', 'negative_control'}:
+            raise PolicyError('Each check requires id, domains, kind, argv, report, min_tests and negative_control')
         cid = check['id']
         if not isinstance(cid, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', cid) or cid in ids:
             raise PolicyError('Check ids must be unique safe identifiers')
@@ -136,6 +136,15 @@ def validate_policy(config, ticket):
         reports.add(report)
         if type(check['min_tests']) is not int or check['min_tests'] < 1:
             raise PolicyError(f'{cid} min_tests must be a positive integer')
+        negative = check['negative_control']
+        if not isinstance(negative, dict) or set(negative) != {'argv', 'expected_failures'}:
+            raise PolicyError(f'{cid} requires negative_control argv and expected_failures')
+        _strings(negative['argv'], f'{cid} mutation argv')
+        if any('\x00' in a for a in negative['argv']):
+            raise PolicyError('Mutation argv contains NUL')
+        _strings(negative['expected_failures'], f'{cid} expected failing test IDs')
+        if not any('{test_mode}' in a for a in argv):
+            raise PolicyError(f'{cid} argv must pass {{test_mode}} to its report adapter')
         if domains & impacted:
             selected.append(dict(check))
     for domain in impacted:
@@ -146,10 +155,10 @@ def validate_policy(config, ticket):
     return selected
 
 
-def validate_evidence(report_path, check):
-    """Validate aggregate counts from a controller-selected, freshly written report.
+def validate_evidence(report_path, check, expect_failure=False):
+    """Validate named outcomes from a controller-selected, freshly written report.
 
-    Report JSON is exactly status/total/passed/failed/skipped. A skipped, empty,
+    Report JSON is exactly status/total/passed/failed/skipped/tests. A skipped, empty,
     inconsistent, malformed or symlinked report never counts as verification.
     The caller must ensure a unique path or remove stale output before execution.
     """
@@ -172,14 +181,27 @@ def validate_evidence(report_path, check):
         data = json.loads(path.read_text(encoding='utf-8'), object_pairs_hook=unique)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise PolicyError(f'Cannot read evidence: {exc}') from exc
-    if not isinstance(data, dict) or set(data) != {'status', 'total', 'passed', 'failed', 'skipped'}:
+    if not isinstance(data, dict) or set(data) != {'status', 'total', 'passed', 'failed', 'skipped', 'tests'}:
         raise PolicyError('Malformed evidence schema')
     if any(type(data[key]) is not int or data[key] < 0 for key in ('total', 'passed', 'failed', 'skipped')):
         raise PolicyError('Evidence counts must be nonnegative integers')
     minimum = check.get('min_tests')
     if type(minimum) is not int or minimum < 1:
         raise PolicyError('Check has no valid minimum test count')
-    if (data['status'] != 'passed' or data['total'] < minimum or
-            data['passed'] != data['total'] or data['failed'] != 0 or data['skipped'] != 0):
+    tests = data['tests']
+    if not isinstance(tests, list) or len(tests) != data['total']:
+        raise PolicyError('Evidence must enumerate every test')
+    ids = set()
+    for test in tests:
+        if (not isinstance(test, dict) or set(test) != {'id', 'status'} or
+                not _nonempty(test['id']) or test['id'] in ids or
+                test['status'] not in ('passed', 'failed')):
+            raise PolicyError('Invalid or duplicate test identity/status')
+        ids.add(test['id'])
+    failed = sum(t['status'] == 'failed' for t in tests)
+    if (data['total'] < minimum or data['passed'] != len(tests) - failed or
+            data['failed'] != failed or data['skipped'] != 0 or
+            data['status'] != ('failed' if expect_failure else 'passed') or
+            (expect_failure and not failed) or (not expect_failure and failed)):
         raise PolicyError('Evidence contains failed, skipped, empty or insufficient tests')
     return data

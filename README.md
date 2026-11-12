@@ -21,7 +21,16 @@ A desktop-led, local coding toolkit for Claude Code and Codex: one coordinator, 
 
 This is standalone Python source, not a globally installed skill. Download and extract the package into a stable tools directory outside your application repository. No pip dependencies. Python 3.10+, Git and authenticated local coding CLIs are needed. GitHub CLI (`gh`) and authenticated Git push are needed for publishing; `gh` is also needed for GitHub CI repair.
 
-**Validation boundary:** the included integration suite runs real Git worktrees with deterministic fake CLI workers/reviewers. This validates orchestration, transport and rejection cases. It does not prove real model quality or your local authentication. A real Claude/Codex pilot remains an onboarding step. Linux was tested; Windows/macOS were not exercised here.
+**Validation boundary:** the included integration suite runs real Git worktrees with deterministic fake CLI workers/reviewers. This validates orchestration, transport and rejection cases. It does not prove real model quality or your local authentication. A real Claude/Codex pilot remains an onboarding step. The automated CI matrix covers Linux, macOS and Windows on Python 3.10 and 3.14; consult its actual results before relying on a platform. Local validation in this change is Linux only.
+
+## Named evidence and failure controls
+
+Checks must prove sensitivity to a deliberate defect in a separate checkout.
+Reports enumerate named tests, and reviewers map each acceptance criterion to
+observed test IDs. Existing count-only policies require migration and fresh runs.
+See [configuration and migration](docs/NAMED_EVIDENCE.md).
+
+Licensed under the [MIT License](LICENSE).
 
 ## Mandatory v0.3 setup
 
@@ -134,9 +143,16 @@ See `examples/DEMO-001.json` and `DEMO-002.json`. Required fields: `id`, `title`
 
 ## Tracking, recovery and limits
 
+Each CLI invocation records minimal local start/finish metadata, including
+previews and failures, in a separate `usage.sqlite3` store. No prompts or
+credentials are collected and nothing is uploaded. See
+[local usage tracing](docs/USAGE_TRACING.md) for inspection and limits.
+
 Use `hold` / `release` to pause inactive tickets durably, and `add --idempotent`
 when repeating an identical submission after a lost response. See
 [TICKET_CONTROLS.md](docs/TICKET_CONTROLS.md) for version checks and examples.
+Use `intake` or `link-issue` to retain GitHub Issue provenance locally; see
+[Issue intake](docs/ISSUE_INTAKE.md) for previews, duplicate handling and PR links.
 
 - SQLite ledger, prompts, logs, candidate branches and reviewer worktrees live under the Git common directory's `infra-factory/`. This is local durable state, not GitHub backup. Back it up through your normal local backup process; do not publish private prompts/logs blindly.
 - `status` shows recorded state and evidence. READY is a historical local result; `publish` performs current eligibility checks. It is not a production-readiness certificate.
@@ -155,7 +171,7 @@ when repeating an identical submission after a lost response. See
 python -m unittest discover -s /path/to/infra-code-factory/tests -v
 ```
 
-Tests create disposable repositories; they do not call paid model providers or publish to GitHub. See [VALIDATION.md](docs/VALIDATION.md) for executed results and limits.
+Tests create disposable repositories; they do not call paid model providers or publish to GitHub. See [current validation](docs/VALIDATION_CURRENT.md) for executed results and limits.
 
 ## Further reading
 

@@ -4,6 +4,7 @@ risk/complexity routing, reviewer escalation, and attempt history across replace
 Fixtures are fake CLIs; nothing here calls a model provider.
 """
 import importlib.util
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -309,11 +310,11 @@ class AttemptHistoryTests(unittest.TestCase):
         return self.factory(['add', '--repo', str(self.repo), '--ticket', str(path)], check)
 
     def set_state(self, tid, state, attempts):
-        with sqlite3.connect(self.db) as con:
+        with contextlib.closing(sqlite3.connect(self.db)) as con, con:
             con.execute('UPDATE tickets SET state=?, attempts=? WHERE id=?', (state, attempts, tid))
 
     def row(self, tid):
-        with sqlite3.connect(self.db) as con:
+        with contextlib.closing(sqlite3.connect(self.db)) as con, con:
             con.row_factory = sqlite3.Row
             return dict(con.execute('SELECT * FROM tickets WHERE id=?', (tid,)).fetchone())
 

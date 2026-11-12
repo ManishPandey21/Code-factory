@@ -28,4 +28,6 @@ else:
                   'findings': [{'file': ticket['paths'][0], 'message': 'Fixture correction required'}] if fail else [],
                   'evidence_digest': evidence['digest'], 'tests_confirmed': True, 'covered_files': evidence['files'],
                   'acceptance_covered': list(range(len(evidence['acceptance'])))}
+        result['acceptance_tests'] = [{'acceptance': i, 'tests': [{'check': evidence['checks'][0]['id'],
+            'test': evidence['checks'][0]['counts']['tests'][0]['id']}]} for i in range(len(evidence['acceptance']))]
 Path(result_path).write_text(json.dumps(result))
