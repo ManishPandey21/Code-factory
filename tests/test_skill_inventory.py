@@ -34,7 +34,7 @@ class InventoryTests(unittest.TestCase):
 
     def test_both_layouts_and_invocation_rules(self):
         tdd, helpers = inventory.builder_skills(self.data)
-        self.assertTrue(tdd.endswith('test-driven-development/SKILL.md'))
+        self.assertEqual(Path(tdd).parts[-2:], ('test-driven-development', 'SKILL.md'))
         self.assertEqual(set(helpers), {'debugging', 'verification', 'feedback', 'design'})
         self.assertTrue(self.data['skills']['matt:to-tickets']['user_invoked_only'])
         prompt = inventory.helper_prompt({'support_skills': helpers})

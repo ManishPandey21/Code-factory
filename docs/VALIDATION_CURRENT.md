@@ -68,6 +68,15 @@ reviews found no remaining blocking issues after these fixes.
   assertion classification, artifact naming and PR repository selection. All were
   corrected; the subsequent tracing review found no actionable defects.
 
+## Hosted portability follow-up
+
+The initial hosted run passed both Linux and macOS Python versions. Windows
+Python 3.10 identified one fixture assertion that assumed `/` separators. It now
+compares `Path.parts`, preserving the expected directory and filename on each
+platform. The eight-test skill-inventory suite passes after the correction;
+these tests overlap the 237-test total. The final hosted matrix is required
+before merging.
+
 ## Limits
 
 Only Linux was executed locally. GitHub Actions now runs the complete suite on
